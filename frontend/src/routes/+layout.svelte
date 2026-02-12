@@ -14,7 +14,7 @@
             <a href="/dashboard" class="nav-item {$page.url.pathname === '/dashboard' ? 'active' : ''}"><i class='bx bxs-dashboard'></i> Dashboard</a>
             <a href="/schedule" class="nav-item {$page.url.pathname === '/schedule' ? 'active' : ''}"><i class='bx bx-calendar'></i> Schedule</a>
             <a href="/tasks" class="nav-item {$page.url.pathname === '/tasks' ? 'active' : ''}"><i class='bx bx-task'></i> Tasks</a>
-            <a href="/ai" class="nav-item {$page.url.pathname === '/ai' ? 'active' : ''}"><i class='bx bx-brain'></i> AI Insights</a>
+            <a href="/insight" class="nav-item {$page.url.pathname === '/insight' ? 'active' : ''}"><i class='bx bx-brain'></i> AI Insights</a>
             <a href="/health" class="nav-item {$page.url.pathname === '/health' ? 'active' : ''}"><i class='bx bx-pulse'></i> Health</a>
             <a href="/settings" class="nav-item {$page.url.pathname === '/settings' ? 'active' : ''}"><i class='bx bx-cog'></i> Settings</a>
         </nav>
@@ -27,7 +27,7 @@
         <a href="/dashboard" class="mob-item {$page.url.pathname === '/dashboard' ? 'active' : ''}"><i class='bx bxs-dashboard'></i> Home</a>
         <a href="/schedule" class="mob-item {$page.url.pathname === '/schedule' ? 'active' : ''}"><i class='bx bx-calendar'></i> Plan</a>
         <a href="/tasks" class="mob-item {$page.url.pathname === '/tasks' ? 'active' : ''}"><i class='bx bx-task'></i> Tasks</a>
-        <a href="/ai" class="mob-item {$page.url.pathname === '/ai' ? 'active' : ''}"><i class='bx bx-brain'></i> AI</a>
+        <a href="/insight" class="mob-item {$page.url.pathname === '/insight' ? 'active' : ''}"><i class='bx bx-brain'></i> AI</a>
         <a href="/health" class="mob-item {$page.url.pathname === '/health' ? 'active' : ''}"><i class='bx bx-pulse'></i> Health</a>
     </nav>
 </div>
