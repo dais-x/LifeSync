@@ -13,35 +13,37 @@
         <!-- =========================================================================== -->
         <!-- MEDICATION CARD (Original UI)                                             -->
         <!-- =========================================================================== -->
-        <div class="card">
-            <h3><i class='bx bx-capsule' style="color:var(--accent-blue)"></i> Medication</h3>
-            <div class="med-item yellow">
-                <div class="med-info">
-                    <div class="med-icon">VitC</div>
-                    <div>
-                        <div class="name">Vitamin C</div>
-                        <div class="desc">Orange round chewable</div>
+        <a href="/health/medicine" class="card-link">
+            <div class="card relative clickable">
+                <h3><i class='bx bx-capsule' style="color:var(--accent-blue)"></i> Medication</h3>
+                <div class="med-item yellow">
+                    <div class="med-info">
+                        <div class="med-icon">VitC</div>
+                        <div>
+                            <div class="name">Vitamin C</div>
+                            <div class="desc">Orange round chewable</div>
+                        </div>
+                    </div>
+                    <div class="med-stock">
+                        <div class="count">12 left</div>
+                        <div class="status">Low Stock</div>
                     </div>
                 </div>
-                <div class="med-stock">
-                    <div class="count">12 left</div>
-                    <div class="status">Low Stock</div>
-                </div>
-            </div>
-            <div class="med-item green">
-                <div class="med-info">
-                    <div class="med-icon">Zn</div>
-                    <div>
-                        <div class="name">Zinc</div>
-                        <div class="desc">White oval pill</div>
+                <div class="med-item green">
+                    <div class="med-info">
+                        <div class="med-icon">Zn</div>
+                        <div>
+                            <div class="name">Zinc</div>
+                            <div class="desc">White oval pill</div>
+                        </div>
+                    </div>
+                    <div class="med-stock">
+                        <div class="count">28 left</div>
+                        <div class="status" style="color:var(--accent-green)">Good</div>
                     </div>
                 </div>
-                <div class="med-stock">
-                    <div class="count">28 left</div>
-                    <div class="status" style="color:var(--accent-green)">Good</div>
-                </div>
             </div>
-        </div>
+        </a>
 
         <!-- =========================================================================== -->
         <!-- CYCLE PHASE CARD (Now links to the new route)                             -->
