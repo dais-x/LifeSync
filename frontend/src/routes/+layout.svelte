@@ -1,4 +1,6 @@
 <script>
+	export const prerender = true;
+	export const csr = true;
 	import { page } from '$app/stores';
 	import '../app.css';
 </script>
