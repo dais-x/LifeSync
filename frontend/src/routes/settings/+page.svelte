@@ -1,3 +1,6 @@
+<script>
+	import { userFormData } from '$lib/stores';
+</script>
 <div class="scroll-area fade-in">
 	<div class="card">
 		<div class="profile-header">
@@ -23,7 +26,29 @@
 					<div class="setting-title">Ghost Mode Auto-Schedule</div>
 					<div class="setting-desc">Allow AI to move tasks automatically</div>
 				</div>
-				<div class="toggle active"><div class="dot"></div></div>
+				<div class="toggle" class:active={$userFormData.control_level === 'auto'} on:click={() => $userFormData.control_level = $userFormData.control_level === 'auto' ? 'manual' : 'auto'}>
+					<div class="dot"></div>
+				</div>
+			</div>
+
+			<div class="setting-item">
+				<div>
+					<div class="setting-title">Allow Smart Sync</div>
+					<div class="setting-desc">Read Gmail and other third-party apps</div>
+				</div>
+				<div class="toggle" class:active={$userFormData.smart_sync} on:click={() => $userFormData.smart_sync = !$userFormData.smart_sync}>
+					<div class="dot"></div>
+				</div>
+			</div>
+
+			<div class="setting-item">
+				<div>
+					<div class="setting-title">Enable Period Tracker</div>
+					<div class="setting-desc">Show period tracker in health dashboard</div>
+				</div>
+				<div class="toggle" class:active={$userFormData.cycle_tracking} on:click={() => $userFormData.cycle_tracking = !$userFormData.cycle_tracking}>
+					<div class="dot"></div>
+				</div>
 			</div>
 
 			<div class="setting-item">

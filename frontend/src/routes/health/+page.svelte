@@ -1,4 +1,5 @@
 <script>
+    import { userFormData } from '$lib/stores';
     // @ts-nocheck
     // This page now only displays summary cards.
     // The detailed tracker is in /health/period-tracker
@@ -48,18 +49,20 @@
         <!-- =========================================================================== -->
         <!-- CYCLE PHASE CARD (Now links to the new route)                             -->
         <!-- =========================================================================== -->
-        <a href="/health/period-tracker" class="card-link">
-            <div class="card relative clickable">
-                <h3><i class='bx bx-calendar-heart' style="color:var(--accent-pink)"></i> Cycle Phase</h3>
-                <div class="cycle-display">
-                    <div class="cycle-circle">
-                        <span class="day">Day {currentDayOfCycle}</span>
-                        <span class="phase">{currentPhase} Phase</span>
+        {#if $userFormData.cycle_tracking}
+            <a href="/health/period-tracker" class="card-link">
+                <div class="card relative clickable">
+                    <h3><i class='bx bx-calendar-heart' style="color:var(--accent-pink)"></i> Cycle Phase</h3>
+                    <div class="cycle-display">
+                        <div class="cycle-circle">
+                            <span class="day">Day {currentDayOfCycle}</span>
+                            <span class="phase">{currentPhase} Phase</span>
+                        </div>
+                        <p class="cycle-msg">Energy levels naturally dipping. Tap to see full tracker.</p>
                     </div>
-                    <p class="cycle-msg">Energy levels naturally dipping. Tap to see full tracker.</p>
                 </div>
-            </div>
-        </a>
+            </a>
+        {/if}
     </div>
 </div>
 

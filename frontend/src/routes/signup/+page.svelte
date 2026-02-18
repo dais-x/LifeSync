@@ -3,7 +3,7 @@
 
 	function handleSignup() {
 		console.log('Signing up...');
-		goto('/dashboard');
+		goto('/signup/details');
 	}
 </script>
 
