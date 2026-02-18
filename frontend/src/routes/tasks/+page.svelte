@@ -1,4 +1,5 @@
 <script>
+	import Notification from '$lib/Notification.svelte';
 	let showAddTaskPopup = false;
 	
 	// State for the new task form
@@ -21,8 +22,38 @@
 	];
 
 	let completed = [
-		{ id: 7, name: 'Initial project setup', category: 'DevOps', deadline: '2024-03-01', priority: 'low' },
+		{ id: 7, name: 'Initial project setup', category: 'DevOps', deadline: '2024-03-01', priority: 'low', completionTime: new Date('2024-03-01T10:00:00Z') },
 	];
+
+	let notificationMessage = '';
+	let notificationKey = 0;
+
+	function sortTodo() {
+		const priorityOrder = { 'past_deadline': 4, 'high': 3, 'mid': 2, 'low': 1 };
+
+		const isPastDue = (task) => {
+			if (!task.deadline) return false;
+			const today = new Date();
+			today.setHours(0, 0, 0, 0); // Normalize to start of day
+			const deadlineDate = new Date(task.deadline);
+			return deadlineDate < today;
+		};
+
+		todo.sort((a, b) => {
+			const aPriority = isPastDue(a) ? 'past_deadline' : a.priority;
+			const bPriority = isPastDue(b) ? 'past_deadline' : b.priority;
+			
+			const aValue = priorityOrder[aPriority] || 0;
+			const bValue = priorityOrder[bPriority] || 0;
+
+			return bValue - aValue; // Sort descending
+		});
+		
+		todo = [...todo]; // Trigger reactivity
+	}
+
+	// Initial sort of the tasks
+	sortTodo();
 
 	function togglePopup() {
 		showAddTaskPopup = !showAddTaskPopup;
@@ -75,6 +106,7 @@
 
 		// 2. Add to local UI for immediate feedback
 		todo = [newTaskItem, ...todo];
+		sortTodo();
 		
 		// 3. Close popup
 		togglePopup();
@@ -93,6 +125,46 @@
 		if (selectedCategory === categoryToDelete) {
 			selectedCategory = categories[0] || '';
 		}
+	}
+
+	let activeMenu = null;
+
+	function toggleTaskMenu(taskId) {
+		activeMenu = activeMenu === taskId ? null : taskId;
+	}
+
+	function handleProgressChange(task, event) {
+		task.progress = parseInt(event.target.value);
+		if (task.progress === 100) {
+			moveToCompleted(task);
+		} else {
+			// This is needed to trigger the reactivity
+			inProgress = [...inProgress];
+		}
+	}
+
+	function moveToCompleted(task) {
+		// Ensure correct shape for completed column
+		const taskToMove = { ...task, completionTime: new Date() };
+		delete taskToMove.progress; // Remove progress if it exists
+		completed = [taskToMove, ...completed];
+		todo = todo.filter(t => t.id !== task.id);
+		inProgress = inProgress.filter(t => t.id !== task.id); // Also remove from inProgress
+		notificationMessage = `Congrats on finishing "${task.name}"!`;
+		notificationKey++;
+		activeMenu = null;
+	}
+
+	function moveToInProgress(task) {
+		// Add progress property
+		inProgress = [{ ...task, progress: 0 }, ...inProgress];
+		todo = todo.filter(t => t.id !== task.id);
+		activeMenu = null;
+	}
+
+	function deleteTask(taskId) {
+		todo = todo.filter(t => t.id !== taskId);
+		activeMenu = null;
 	}
 </script>
 
@@ -115,7 +187,23 @@
 			<div class="col-header">To Do <span class="badge">{todo.length}</span></div>
 			{#each todo as task (task.id)}
 				<div class="task-card">
-					<span class="tag {task.priority}">{task.category}</span>
+					<div class="card-header-actions">
+						<span class="tag {task.priority}">{task.category}</span>
+						<div class="task-actions">
+							<button class="options-btn" on:click={() => toggleTaskMenu(task.id)} title="Task options">
+								<i class="bx bx-dots-horizontal-rounded"></i>
+							</button>
+							{#if activeMenu === task.id}
+								<div class="actions-menu">
+									<button on:click={(e) => { e.stopPropagation(); moveToInProgress(task); }}><i class='bx bx-loader-alt'></i> Push to Progress</button>
+									<button on:click={(e) => { e.stopPropagation(); moveToCompleted(task); }}><i class='bx bx-check-double'></i> Mark as Completed</button>
+									<div class="divider"></div>
+									<button on:click={(e) => { e.stopPropagation(); deleteTask(task.id); }} class="delete"><i class='bx bx-trash'></i> Delete Task</button>
+								</div>
+							{/if}
+						</div>
+					</div>
+
 					<h4>{task.name}</h4>
 					<p class="task-meta">Due: {task.deadline || 'N/A'}</p>
 					<div class="card-footer">
@@ -134,7 +222,7 @@
 				<div class="task-card">
 					<span class="tag green">{task.category}</span>
 					<h4>{task.name}</h4>
-					<div class="progress-bar"><div class="fill" style="width: {task.progress}%"></div></div>
+					<input type="range" min="0" max="100" value={task.progress} on:input={(e) => handleProgressChange(task, e)} class="progress-slider" />
 					<div class="progress-text">{task.progress}% Complete</div>
 				</div>
 			{/each}
@@ -145,11 +233,18 @@
 			{#each completed as task (task.id)}
 				<div class="task-card completed">
 					<h4>{task.name}</h4>
+					{#if task.completionTime}
+					<p class="task-meta">Completed: {task.completionTime.toLocaleString()}</p>
+					{/if}
 				</div>
 			{/each}
 		</div>
 	</div>
 </div>
+
+{#if notificationMessage}
+	<Notification message={notificationMessage} key={notificationKey} />
+{/if}
 
 {#if showAddTaskPopup}
 	<div class="popup-backdrop" on:click={togglePopup}>
@@ -218,7 +313,7 @@
 	.kanban-col { background: var(--card-bg); padding: 1rem; border-radius: 0.75rem; border: 1px solid var(--border-color); min-height: 500px; }
 	.col-header { display: flex; justify-content: space-between; color: var(--text-white); font-weight: 600; margin-bottom: 1rem; font-size: 0.9rem; }
 	.badge { background: #1e1f2e; color: var(--text-gray); padding: 0.1rem 0.5rem; border-radius: 1rem; font-size: 0.75rem; }
-	.task-card { background: #1e1f2e; padding: 1rem; border-radius: 0.5rem; border: 1px solid var(--border-color); margin-bottom: 1rem; cursor: pointer; }
+	.task-card { background: #1e1f2e; padding: 1rem; border-radius: 0.5rem; border: 1px solid var(--border-color); margin-bottom: 1rem; }
 	.task-card:hover { border-color: var(--accent-purple); }
 	.task-card.completed h4 { text-decoration: line-through; color: var(--text-gray); }
 	.task-card h4 { color: white; margin: 0.5rem 0; font-size: 0.9rem; font-weight: 500; }
@@ -259,4 +354,94 @@
 	.save-btn { background: var(--accent-purple); color: white; border: none; padding: 1rem; border-radius: 0.5rem; cursor: pointer; font-size: 1rem; font-weight: 500; margin-top: 1rem; }
 	.fade-in { animation: fadeIn 0.4s ease-out forwards; }
 	@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+	@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+	.card-header-actions {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-start;
+	}
+
+	.task-actions {
+		position: relative;
+	}
+
+	.options-btn {
+		background: none;
+		border: none;
+		color: var(--text-gray);
+		cursor: pointer;
+		font-size: 1.25rem;
+		padding: 0;
+		line-height: 1;
+	}
+	.options-btn:hover {
+		color: white;
+	}
+
+	.actions-menu {
+		position: absolute;
+		top: calc(100% + 5px);
+		right: 0;
+		background: #2a2c41;
+		border-radius: 0.5rem;
+		padding: 0.5rem;
+		z-index: 10;
+		width: 180px;
+		border: 1px solid var(--border-color);
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		animation: fadeIn 0.1s ease-out;
+	}
+
+	.actions-menu button {
+		background: none;
+		border: none;
+		color: var(--text-gray);
+		padding: 0.5rem 0.75rem;
+		text-align: left;
+		cursor: pointer;
+		border-radius: 0.25rem;
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		font-size: 0.85rem;
+		font-weight: 500;
+		width: 100%;
+	}
+
+	.actions-menu button:hover {
+		background: var(--accent-purple);
+		color: white;
+	}
+	
+	.actions-menu button i {
+		font-size: 1.1rem;
+	}
+
+	.actions-menu .divider {
+		height: 1px;
+		background: var(--border-color);
+		margin: 0.25rem 0;
+	}
+
+	.actions-menu button.delete {
+		color: #f87171;
+	}
+
+	.actions-menu button.delete:hover {
+		background: var(--accent-red);
+		color: white;
+	}
+
+	/* Adjustments for card content based on new header */
+	.task-card h4 {
+		margin-top: 0;
+	}
+
+	.progress-slider {
+		width: 100%;
+		margin-top: 0.5rem;
+	}
 </style>
