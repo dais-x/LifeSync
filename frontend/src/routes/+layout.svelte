@@ -73,6 +73,9 @@
 		<a href="/health" class="mob-item {$page.url.pathname === '/health' ? 'active' : ''}"
 			><i class="bx bx-pulse"></i> Health</a
 		>
+		<a href="/settings" class="mob-item {$page.url.pathname === '/settings' ? 'active' : ''}"
+			><i class="bx bx-cog"></i> Settings</a
+		>
 
 		<a href="/timer" class="mob-item {$page.url.pathname === '/timer' ? 'active' : ''}"
 			><i class="bx bx-timer"></i> Timer</a

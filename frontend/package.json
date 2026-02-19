@@ -35,6 +35,7 @@
 		"vite": "^7.3.1"
 	},
 	"dependencies": {
+		"@capacitor-community/camera-preview": "^7.0.5",
 		"@capacitor/android": "^8.1.0",
 		"@capacitor/camera": "^8.0.1",
 		"@capacitor/core": "^8.1.0",

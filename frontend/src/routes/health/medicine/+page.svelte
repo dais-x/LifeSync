@@ -1,11 +1,14 @@
 <script>
 	import { Camera, CameraResultType } from '@capacitor/camera';
+	import { CameraPreview } from '@capacitor-community/camera-preview';
     import { userFormData } from '$lib/stores';
+	import { onMount, onDestroy } from 'svelte';
 
 	let showPopup = $state(false);
 	let entryMode = $state(null); // null, 'manual', 'photo', 'edit'
 	let capturedImage = $state(null);
 	let editingMedicine = $state(null);
+	let cameraActive = $state(false);
 
 	let newMed = $state({
 		nickname: '',
@@ -16,34 +19,81 @@
         currentStock: 0
 	});
 
+	async function startCamera() {
+		const scanBox = document.getElementById('medicine-scan-box');
+		if (!scanBox) return;
+		
+		const rect = scanBox.getBoundingClientRect();
+
+		// Capacitor Camera Preview works best when we make everything transparent
+		// and put the camera in the back.
+		const cameraPreviewOptions = {
+			position: 'rear',
+			x: rect.left,
+			y: rect.top,
+			width: rect.width,
+			height: rect.height,
+			toBack: true, // Place behind webview
+			parent: 'medicine-scan-box',
+			className: 'camera-preview',
+			disableExifHeaderRestore: true
+		};
+
+		try {
+			await CameraPreview.start(cameraPreviewOptions);
+			cameraActive = true;
+			// Force transparency on all parents
+			document.body.classList.add('camera-mode');
+		} catch (e) {
+			console.error('Error starting camera preview', e);
+		}
+	}
+
+	async function stopCamera() {
+		if (cameraActive) {
+			await CameraPreview.stop();
+			cameraActive = false;
+			document.body.classList.remove('camera-mode');
+		}
+	}
+
 	async function takePicture() {
 		try {
-			const permissions = await Camera.checkPermissions();
-			if (permissions.camera !== 'granted') {
-				const request = await Camera.requestPermissions({ permissions: ['camera', 'photos'] });
-				if (request.camera !== 'granted') {
-					alert('Camera permission is required to take photos of your medicine.');
-					return;
-				}
-			}
-
-			const image = await Camera.getPhoto({
-				quality: 90,
-				allowEditing: true,
-				resultType: CameraResultType.Uri
-			});
-			capturedImage = image.webPath;
+			const result = await CameraPreview.capture({ quality: 90 });
+			const rawImage = `data:image/jpeg;base64,${result.value}`;
+			
+			// Crop the image to match the scan-box aspect ratio
+			capturedImage = await cropImage(rawImage);
+			await stopCamera();
 		} catch (error) {
 			console.error('Error taking picture', error);
 		}
 	}
 
+	function cropImage(base64) {
+		return new Promise((resolve) => {
+			const img = new Image();
+			img.onload = () => {
+				const canvas = document.createElement('canvas');
+				const ctx = canvas.getContext('2d');
+				
+				// In this case, since we constrained the preview to the box,
+				// the capture might already be close, but we ensure it's exact.
+				canvas.width = img.width;
+				canvas.height = img.height;
+				ctx.drawImage(img, 0, 0);
+				resolve(canvas.toDataURL('image/jpeg'));
+			};
+			img.src = base64;
+		});
+	}
+
 	function closePopup() {
+		stopCamera();
 		showPopup = false;
 		entryMode = null;
 		capturedImage = null;
 		editingMedicine = null;
-		// Reset newMed object
 		newMed = { nickname: '', name: '', directions: ['0', '0', '0', '0'], expiry: '', food: 'any', currentStock: 0 };
 	}
 
@@ -61,7 +111,16 @@
 
 	function setEntryMode(mode) {
 		entryMode = mode;
+		if (mode === 'photo') {
+			setTimeout(startCamera, 100);
+		} else {
+			stopCamera();
+		}
 	}
+
+	onDestroy(() => {
+		stopCamera();
+	});
 
     async function syncMedicationData(payload) {
         if (!$userFormData.health_sync_url || $userFormData.health_sync_url.includes('your-n8n-webhook-url')) {
@@ -248,9 +307,9 @@
 					</form>
 				{:else if entryMode === 'photo'}
 					{#if !capturedImage}
-						<div class="camera-container">
+						<div class="camera-container" id="camera-preview-container">
 							<div class="camera-overlay">
-								<div class="scan-box"></div>
+								<div class="scan-box" id="medicine-scan-box"></div>
 								<p class="scan-text">Position the medicine label inside the box</p>
 							</div>
 							<button class="capture-btn" on:click={takePicture}>
@@ -512,13 +571,19 @@
         position: relative;
         width: 100%;
         aspect-ratio: 1;
-        background: #000;
+        background: transparent; /* Changed to transparent to see camera behind */
         border-radius: 0.5rem;
         display: flex;
         justify-content: center;
         align-items: center;
         overflow: hidden;
     }
+	:global(.camera-preview) {
+		position: absolute;
+		width: 100%;
+		height: 100%;
+		z-index: 10; /* Bring to front over other elements in the scan box */
+	}
     .camera-overlay {
         position: absolute;
         top: 0;
@@ -530,14 +595,16 @@
         justify-content: center;
         align-items: center;
         background: rgba(0,0,0,0.6);
-        box-shadow: 0 0 0 9999px rgba(0,0,0,0.6);
+		z-index: 5;
     }
     .scan-box {
         width: 80%;
         height: 40%;
-        border: 2px solid white;
+        border: 2px solid var(--accent-purple);
         border-radius: 0.5rem;
         background: transparent;
+		position: relative;
+		overflow: hidden;
     }
     .scan-text {
         color: white;

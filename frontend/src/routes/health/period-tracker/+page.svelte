@@ -278,7 +278,7 @@
                     <div class="prediction-label">Next Expected Period</div>
                     <div class="days-countdown">{daysUntilNextPeriod} days until next period</div>
                 </div>
-                {#if !userSettings.medicalConditions.none}
+                {#if !$userFormData.menstrual_diagnosis.none}
                     <div class="prediction-window cute-mode">
                         <div class="window-header">
                             <i class='bx bxs-magic-wand sparkle-icon'></i>
@@ -516,9 +516,9 @@
     .custom-checkbox span { color: white; font-size: 0.9rem; text-transform: capitalize; }
 
     .cycle-display { display: flex; flex-direction: column; align-items: center; padding: 1rem 0 0; }
-    .cycle-circle { width: 120px; height: 120px; border: 8px solid var(--accent-pink); border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; margin-bottom: 1.5rem; }
+    .cycle-circle { width: 120px; height: 120px; border: 8px solid var(--accent-pink); border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; margin-bottom: 1.5rem; transition: border-color 0.3s; position: relative; z-index: 1; }
     .day { color: white; font-size: 1.5rem; font-weight: bold; }
-    .phase { color: var(--accent-pink); font-size: 0.8rem; font-weight: bold; }
+    .phase { color: var(--accent-pink); font-size: 0.8rem; font-weight: bold; transition: color 0.3s; }
     .cycle-msg { text-align: center; color: var(--text-gray); font-size: 0.9rem; }
 
     .prediction-card { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 1.5rem;}
