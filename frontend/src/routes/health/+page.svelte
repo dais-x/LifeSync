@@ -1,10 +1,56 @@
 <script>
     import { userFormData } from '$lib/stores';
     // @ts-nocheck
-    // This page now only displays summary cards.
-    // The detailed tracker is in /health/period-tracker
-    let currentDayOfCycle = 21; // This would be loaded from a summary state store in a real app
-    let currentPhase = 'Luteal'; // This would be loaded from a summary state store in a real app
+    
+    let currentDayOfCycle = $derived.by(() => {
+        if (!$userFormData.last_period_date) return 0;
+        
+        const lastDate = new Date($userFormData.last_period_date);
+        lastDate.setHours(0, 0, 0, 0);
+        
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        const diffTime = today.getTime() - lastDate.getTime();
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+        
+        const cycleLength = $userFormData.avg_cycle_length || 28;
+        return (diffDays % cycleLength) + 1;
+    });
+
+    let daysUntilNextPeriod = $derived.by(() => {
+        if (!$userFormData.last_period_date) return 0;
+        const lastDate = new Date($userFormData.last_period_date);
+        lastDate.setHours(0, 0, 0, 0);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const cycleLength = $userFormData.avg_cycle_length || 28;
+        
+        const nextStart = new Date(lastDate);
+        nextStart.setDate(lastDate.getDate() + cycleLength);
+        while (nextStart < today) {
+            nextStart.setDate(nextStart.getDate() + cycleLength);
+        }
+        const diffTime = nextStart.getTime() - today.getTime();
+        return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    });
+
+    let cycleInfo = $derived.by(() => {
+        const day = currentDayOfCycle;
+        if (day === 0) return { phase: 'N/A', color: 'var(--text-gray)', msg: 'Set up your tracker.' };
+        
+        const avgPeriod = $userFormData.avg_period_length || 5;
+
+        if (day <= avgPeriod) {
+            return { phase: 'Menstrual', color: '#ff4d4d', msg: 'Energy levels are at their lowest. Prioritize rest.' };
+        } else if (day <= 11) {
+            return { phase: 'Follicular', color: '#2ecc71', msg: 'Energy is rising. Great time for new projects!' };
+        } else if (day <= 16) {
+            return { phase: 'Ovulation', color: '#ff69b4', msg: 'Peak energy and confidence. Perfect for socializing.' };
+        } else {
+            return { phase: 'Luteal', color: '#2ecc71', msg: 'Energy levels naturally dipping. Focus on finishing tasks.' };
+        }
+    });
 </script>
 
 <div class="scroll-area fade-in">
@@ -53,13 +99,28 @@
             <a href="/health/period-tracker" class="card-link">
                 <div class="card relative clickable">
                     <h3><i class='bx bx-calendar-heart' style="color:var(--accent-pink)"></i> Cycle Phase</h3>
-                    <div class="cycle-display">
-                        <div class="cycle-circle">
-                            <span class="day">Day {currentDayOfCycle}</span>
-                            <span class="phase">{currentPhase} Phase</span>
+                    {#if !$userFormData.last_period_date}
+                        <div class="setup-msg">
+                            <i class='bx bx-info-circle'></i>
+                            <p>Tap to set up your cycle tracker</p>
                         </div>
-                        <p class="cycle-msg">Energy levels naturally dipping. Tap to see full tracker.</p>
-                    </div>
+                    {:else}
+                        <div class="cycle-display cute-summary">
+                            <div class="sparkles-container">
+                                <i class='bx bxs-sparkles sparkle s1'></i>
+                                <i class='bx bxs-sparkles sparkle s2'></i>
+                            </div>
+                            <div class="cycle-circle" style="border-color: {cycleInfo.color}">
+                                <span class="day">Day {currentDayOfCycle}</span>
+                                <span class="phase" style="color: {cycleInfo.color}">{cycleInfo.phase} Phase</span>
+                            </div>
+                            <div class="days-until">
+                                <i class='bx bxs-heart-circle heart-pulse'></i>
+                                {daysUntilNextPeriod} days until next period
+                            </div>
+                            <p class="cycle-msg">{cycleInfo.msg}</p>
+                        </div>
+                    {/if}
                 </div>
             </a>
         {/if}
@@ -70,6 +131,8 @@
     :root {
         --accent-pink: #FF69B4;
         --accent-blue: #87CEEB;
+        --accent-red: #ff4d4d;
+        --accent-green: #2ecc71;
     }
     .page-title { color: white; margin-bottom: 2rem; }
     .grid-layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
@@ -85,6 +148,8 @@
         padding: 1.5rem; 
         border-radius: 1rem; 
         height: 100%;
+        display: flex;
+        flex-direction: column;
     }
     .card.clickable { 
         cursor: pointer; 
@@ -96,6 +161,17 @@
     }
     h3 { color: white; margin-top: 0; display: flex; align-items: center; gap: 0.5rem; font-size: 1rem; }
     
+    .setup-msg {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-gray);
+        gap: 0.5rem;
+    }
+    .setup-msg i { font-size: 2rem; }
+
     /* Medication Card Styles */
     .med-item { display: flex; justify-content: space-between; padding: 1rem; background: #1E1F2E; border-radius: 0.5rem; margin-bottom: 1rem; border-left: 4px solid; }
     .med-item.yellow { border-color: var(--accent-orange); }
@@ -110,10 +186,42 @@
 
     /* Cycle Display Styles */
     .cycle-display { display: flex; flex-direction: column; align-items: center; padding: 1rem 0 0; }
-    .cycle-circle { width: 120px; height: 120px; border: 8px solid var(--accent-pink); border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; margin-bottom: 1.5rem; }
+    .cycle-circle { width: 120px; height: 120px; border: 8px solid var(--accent-pink); border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; margin-bottom: 1.5rem; transition: border-color 0.3s; position: relative; z-index: 1; }
     .day { color: white; font-size: 1.5rem; font-weight: bold; }
-    .phase { color: var(--accent-pink); font-size: 0.8rem; font-weight: bold; }
-    .cycle-msg { text-align: center; color: var(--text-gray); font-size: 0.9rem; }
+    .phase { color: var(--accent-pink); font-size: 0.8rem; font-weight: bold; transition: color 0.3s; }
+    
+    /* Cute Summary Styles */
+    .cute-summary { position: relative; }
+    .sparkles-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+    .sparkle { position: absolute; color: var(--accent-pink); font-size: 1.2rem; filter: drop-shadow(0 0 5px rgba(255, 105, 180, 0.5)); opacity: 0; animation: sparkleFloat 3s infinite; }
+    .sparkle.s1 { top: 10%; left: 20%; animation-delay: 0s; }
+    .sparkle.s2 { top: 5%; right: 20%; animation-delay: 1.5s; }
+    
+    @keyframes sparkleFloat {
+        0%, 100% { transform: scale(0) rotate(0deg); opacity: 0; }
+        50% { transform: scale(1.2) rotate(45deg); opacity: 1; }
+    }
+
+    .days-until { 
+        font-size: 0.85rem; 
+        color: var(--accent-pink); 
+        margin: 0.5rem 0; 
+        font-weight: 600; 
+        display: flex; 
+        align-items: center; 
+        gap: 0.4rem;
+        background: rgba(255, 105, 180, 0.1);
+        padding: 0.3rem 0.8rem;
+        border-radius: 99px;
+    }
+    .heart-pulse { animation: heartPulse 1.5s infinite; font-size: 1.1rem; }
+    @keyframes heartPulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.2); }
+        100% { transform: scale(1); }
+    }
+
+    .cycle-msg { text-align: center; color: var(--text-gray); font-size: 0.8rem; }
 
     /* Fade-in Animation */
     .fade-in { animation: fadeIn 0.4s ease-out forwards; }

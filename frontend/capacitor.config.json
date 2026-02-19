@@ -1,5 +1,11 @@
 {
   "appId": "com.Lifesync.app",
   "appName": "Lifesync",
-  "webDir": "build"
+  "webDir": "build",
+  "plugins": {
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#0b0c15"
+    }
+  }
 }

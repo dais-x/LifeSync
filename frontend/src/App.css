@@ -27,6 +27,8 @@ body {
 	display: flex;
 	height: 100vh;
 	overflow: hidden;
+	padding-top: env(safe-area-inset-top);
+	padding-bottom: env(safe-area-inset-bottom);
 }
 .main-content {
 	flex: 1;
@@ -94,17 +96,25 @@ body {
 	width: 100%;
 	background: var(--card-bg);
 	border-top: 1px solid var(--border-color);
-	justify-content: space-around;
-	padding: 0.5rem 0;
+	padding: 0.5rem 1rem calc(0.5rem + env(safe-area-inset-bottom));
 	z-index: 50;
+	overflow-x: auto;
+	white-space: nowrap;
+	-webkit-overflow-scrolling: touch;
+	scrollbar-width: none; /* Firefox */
+}
+.mobile-nav::-webkit-scrollbar {
+	display: none; /* Chrome, Safari, Opera */
 }
 .mob-item {
-	display: flex;
+	display: inline-flex;
 	flex-direction: column;
 	align-items: center;
 	color: var(--text-gray);
 	text-decoration: none;
-	font-size: 0.6rem;
+	font-size: 0.65rem;
+	min-width: 4.5rem;
+	flex-shrink: 0;
 }
 .mob-item i {
 	font-size: 1.25rem;

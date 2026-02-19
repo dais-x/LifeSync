@@ -1,21 +1,32 @@
 <script>
 	import { Camera, CameraResultType } from '@capacitor/camera';
+    import { userFormData } from '$lib/stores';
 
-	let showPopup = false;
-	let entryMode = null; // null, 'manual', 'photo', 'edit'
-	let capturedImage = null;
-	let editingMedicine = null;
+	let showPopup = $state(false);
+	let entryMode = $state(null); // null, 'manual', 'photo', 'edit'
+	let capturedImage = $state(null);
+	let editingMedicine = $state(null);
 
-	let newMed = {
+	let newMed = $state({
 		nickname: '',
 		name: '',
 		directions: ['0', '0', '0', '0'],
 		expiry: '',
-		food: 'any'
-	};
+		food: 'any',
+        currentStock: 0
+	});
 
 	async function takePicture() {
 		try {
+			const permissions = await Camera.checkPermissions();
+			if (permissions.camera !== 'granted') {
+				const request = await Camera.requestPermissions({ permissions: ['camera', 'photos'] });
+				if (request.camera !== 'granted') {
+					alert('Camera permission is required to take photos of your medicine.');
+					return;
+				}
+			}
+
 			const image = await Camera.getPhoto({
 				quality: 90,
 				allowEditing: true,
@@ -33,7 +44,7 @@
 		capturedImage = null;
 		editingMedicine = null;
 		// Reset newMed object
-		newMed = { nickname: '', name: '', directions: ['0', '0', '0', '0'], expiry: '', food: 'any' };
+		newMed = { nickname: '', name: '', directions: ['0', '0', '0', '0'], expiry: '', food: 'any', currentStock: 0 };
 	}
 
 	function openAddPopup() {
@@ -52,42 +63,80 @@
 		entryMode = mode;
 	}
 
-	function handleSubmit(event) {
+    async function syncMedicationData(payload) {
+        if (!$userFormData.health_sync_url || $userFormData.health_sync_url.includes('your-n8n-webhook-url')) {
+            console.warn('Health sync URL not configured.');
+            return;
+        }
+
+        try {
+            const response = await fetch($userFormData.health_sync_url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    type: 'medication',
+                    timestamp: new Date().toISOString(),
+                    data: payload
+                })
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                if (result.lowStock) {
+                    alert(`Alert: ${payload.nickname} (${payload.name}) is low on stock! Only ${payload.currentStock} left.`);
+                }
+                return result;
+            }
+        } catch (error) {
+            console.error('Error syncing medication data:', error);
+        }
+    }
+
+	async function handleSubmit(event) {
 		event.preventDefault();
+        const medData = { ...newMed };
+        
 		if (entryMode === 'edit') {
 			const index = medicines.findIndex(m => m === editingMedicine);
 			if (index !== -1) {
-				medicines[index] = { ...newMed };
+				medicines[index] = medData;
 			}
 		} else if (entryMode === 'manual') {
-			medicines = [...medicines, { ...newMed }];
+			medicines = [...medicines, medData];
 		}
+        
+        // Sync to backend
+        syncMedicationData(medData);
+        
 		closePopup();
 	}
 
-	let medicines = [
+	let medicines = $state([
 		{
 			nickname: 'Happy Pill',
 			name: 'Sertraline',
 			expiry: '2025-12-31',
 			directions: ['1', '0', '0', '0'],
-			food: 'after'
+			food: 'after',
+            currentStock: 12
 		},
 		{
 			nickname: 'Allergy Fix',
 			name: 'Cetirizine',
 			expiry: '2024-08-15',
 			directions: ['0', '0', '1', '0'],
-			food: 'before'
+			food: 'before',
+            currentStock: 28
 		},
 		{
 			nickname: 'Pain Away',
 			name: 'Ibuprofen',
 			expiry: '2026-01-20',
 			directions: ['1', '1', '1', '1'],
-			food: 'after'
+			food: 'after',
+            currentStock: 4
 		}
-	];
+	]);
 </script>
 
 <div class="scroll-area fade-in">
@@ -111,6 +160,12 @@
 				<div class="card-body">
 					<div class="name">{med.name}</div>
 					<p class="description">{med.directions.join('-')} - {med.food}</p>
+                    <div class="stock-info" class:low-stock={med.currentStock < 5}>
+                        <i class='bx bx-package'></i> Stock: {med.currentStock} units
+                        {#if med.currentStock < 5}
+                            <span class="warning-tag">Low Stock</span>
+                        {/if}
+                    </div>
 				</div>
 			</div>
 		{/each}
@@ -184,6 +239,10 @@
 								<option value="after">After Food</option>
 								<option value="any">Any Time</option>
 							</select>
+						</div>
+                        <div class="form-group">
+							<label for="stock">Current Stock (units)</label>
+							<input type="number" id="stock" min="0" bind:value={newMed.currentStock}>
 						</div>
 						<button type="submit" class="save-btn">{entryMode === 'edit' ? 'Save Changes' : 'Save Medicine'}</button>
 					</form>
@@ -308,6 +367,26 @@
         color: var(--text-gray);
         font-size: 0.9rem;
         line-height: 1.4;
+        margin-bottom: 0.5rem;
+    }
+    .stock-info {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.85rem;
+        color: var(--text-gray);
+    }
+    .stock-info.low-stock {
+        color: var(--accent-red);
+    }
+    .warning-tag {
+        background: rgba(239, 68, 68, 0.1);
+        color: var(--accent-red);
+        padding: 0.1rem 0.4rem;
+        border-radius: 0.25rem;
+        font-size: 0.7rem;
+        font-weight: 700;
+        text-transform: uppercase;
     }
 
     /* Popup Styles */

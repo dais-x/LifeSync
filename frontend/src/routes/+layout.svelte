@@ -3,6 +3,20 @@
 	export const csr = true;
 	import { page } from '$app/stores';
 	import '../app.css';
+	import { onMount } from 'svelte';
+	import { StatusBar, Style } from '@capacitor/status-bar';
+	import { Capacitor } from '@capacitor/core';
+
+	onMount(async () => {
+		if (Capacitor.isNativePlatform()) {
+			try {
+				await StatusBar.setStyle({ style: Style.Dark });
+				await StatusBar.setBackgroundColor({ color: '#0b0c15' }); // Matching --bg-dark
+			} catch (e) {
+				console.error('StatusBar error:', e);
+			}
+		}
+	});
 </script>
 
 <svelte:head>
