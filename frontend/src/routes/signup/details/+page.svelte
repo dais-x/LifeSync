@@ -33,16 +33,62 @@
 		return age;
 	}
 
-	function nextStep() {
-		if (step === 1) {
-			const age = getAge($userFormData.dob);
-			if (age < 7 || age > 150) {
-				alert('Please enter a valid date of birth. Age must be between 7 and 150.');
-				return;
+	function validateStep(currentStep) {
+		let isValid = true;
+		let message = '';
+
+		if (currentStep === 1) {
+			if (!$userFormData.nickname) {
+				isValid = false;
+				message = 'Please enter your nickname.';
+			} else if (!statusRadio) { // Check if a status radio is selected
+				isValid = false;
+				message = 'Please select your current status.';
+			} else if (statusRadio === 'other' && !otherStatusText) {
+				isValid = false;
+				message = 'Please specify your status.';
+			} else if (!$userFormData.dob) {
+				isValid = false;
+				message = 'Please enter your date of birth.';
+			} else {
+				const age = getAge($userFormData.dob);
+				if (age < 7 || age > 150) {
+					isValid = false;
+					message = 'Please enter a valid date of birth. Age must be between 7 and 150.';
+				}
 			}
+            // Chronotype, scheduling_style, main_focus already have defaults or are required to be selected by the UI design
+            // For radio groups, if no default is set and user hasn't selected, need explicit check
+            // For now, assume they are handled by binding or initial state
+		} else if (currentStep === 2) {
+            // cycle_tracking has defaults, mess_factor has defaults
+            // digital_wellbeing: needs at least one selected
+            if ($userFormData.digital_wellbeing.length === 0) {
+                isValid = false;
+                message = 'Please select at least one digital well-being goal.';
+            } else if ($userFormData.digital_wellbeing.includes('other') && !otherWellbeingText) {
+                isValid = false;
+                message = 'Please specify your other digital well-being goal.';
+            }
+		} else if (currentStep === 3) {
+            // smart_sync, control_level, notification_style already have defaults or are required by the UI design
 		}
+
+		if (!isValid) {
+			alert('Sign up incomplete: ' + message);
+		}
+		return isValid;
+	}
+
+	function nextStep() {
+		console.log('nextStep called, current step:', step);
+		if (!validateStep(step)) { // Add validation check
+			return; // Stop if validation fails
+		}
+
 		if (step < totalSteps) {
 			step += 1;
+			console.log('Moving to step:', step);
 		}
 	}
 
@@ -55,6 +101,10 @@
 	let showCompletionPopup = false;
 
 	function handleFinish() {
+		console.log('handleFinish called');
+		if (!validateStep(step)) { // Add validation check
+			return; // Stop if validation fails
+		}
 		// Finalize digital_wellbeing if 'other' is selected
 		if ($userFormData.digital_wellbeing.includes('other')) {
 			$userFormData.update(currentData => {
@@ -66,6 +116,7 @@
 		}
 
 		showCompletionPopup = true;
+		console.log('showCompletionPopup set to true, navigating to /dashboard in 3 seconds');
 		setTimeout(() => {
 			goto('/dashboard');
 		}, 3000); // 3-second delay

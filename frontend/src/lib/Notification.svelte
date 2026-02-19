@@ -1,10 +1,9 @@
 <script>
     import { onMount } from 'svelte';
 
-    export let message = '';
-    export let duration = 5000;
+    let { message = '', duration = 5000 } = $props();
 
-    let show = true;
+    let show = $state(true);
 
     onMount(() => {
         const timer = setTimeout(() => {
