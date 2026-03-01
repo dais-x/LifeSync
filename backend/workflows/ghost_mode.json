@@ -1,0 +1,282 @@
+{
+  "name": "GhostMode",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours"
+            }
+          ]
+        }
+      },
+      "id": "b28414dc-2cb2-4bb7-ab9f-27cc564f879c",
+      "name": "Every Hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -432,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "collection": "tasks",
+        "options": {},
+        "query": "={\n  \"status\": \"pending\",\n  \"scheduled_start\": { \"$lt\": \"{{ $now.toISO() }}\" },\n  \"$or\": [\n    { \"due_date\": null },\n    { \"due_date\": { \"$gt\": \"{{ $now.toISO() }}\" } }\n  ]\n}"
+      },
+      "id": "84e1b9c3-5689-443e-a1ce-e28b22fc51ac",
+      "name": "Fetch Missed Tasks",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        -224,
+        -80
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "tb8iGFtr3vF48hCx",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "collection": "user_profiles",
+        "options": {},
+        "query": "={\n  \"user_id\": \"{{ $json.user_id }}\"\n}"
+      },
+      "id": "42cc97cb-d9a0-4668-9f85-dc0aa3d80d4e",
+      "name": "Fetch User Profile",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        -32,
+        -80
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "tb8iGFtr3vF48hCx",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "collection": "tasks",
+        "options": {},
+        "query": "={\n  \"user_id\": \"{{ $('Fetch Missed Tasks').first().json.user_id }}\",\n  \"status\": \"pending\",\n  \"scheduled_start\": { \"$gt\": \"{{ $now.toISO() }}\" }\n}"
+      },
+      "id": "d1702b4b-8078-46a0-b567-01e0662f7e80",
+      "name": "Fetch Existing Schedule",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        176,
+        -80
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "tb8iGFtr3vF48hCx",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "prompt": "={\n  \"role\": \"system\",\n  \"instructions\": \"You are the LifeSyncPro Rescheduling Engine. Your ONLY job is to take a missed task and assign it a new 'scheduled_start' and 'scheduled_end' time based strictly on the provided rules. You must output raw JSON only.\",\n  \"inputs\": {\n    \"current_time\": \"{{ $now.toISO() }}\",\n    \"missed_task\": {{ JSON.stringify($('Fetch Missed Tasks').first().json) }},\n    \"user_habit_profile\": {{ JSON.stringify($('Fetch User Profile').item.json) }},\n    \"existing_schedule\": {{ JSON.stringify($input.all().map(i => i.json)) }}\n  },\n  \"rules\": [\n    \"1. DURATION: Calculate the exact duration of the 'missed_task' (end - start). The new scheduled block MUST be the exact same length.\",\n    \"2. DEADLINE: If the 'missed_task' has a 'due_date', the new 'scheduled_end' MUST be before the 'due_date'. If impossible, return an error object.\",\n    \"3. SLEEP: The new block MUST NOT overlap with the 'inferred_sleep_window'.\",\n    \"4. HARD BLOCKS: The new block MUST NOT overlap with any 'weekly_hard_blocks'.\",\n    \"5. CONFLICTS: The new block MUST NOT overlap with any times in the 'existing_schedule'.\",\n    \"6. OPTIMIZATION: Attempt to place the new block within the 'peak_productivity_windows'. If impossible, find the next earliest available free slot.\",\n    \"7. SLUMP: Avoid the 'high_ignore_probability_windows' unless absolutely necessary to meet a deadline.\"\n  ],\n  \"expected_output_format\": {\n    \"_id\": \"string\",\n    \"scheduled_start\": \"ISO 8601 Timestamp\",\n    \"scheduled_end\": \"ISO 8601 Timestamp\",\n    \"reasoning\": \"A 1-sentence explanation of why you chose this slot\"\n  }\n}"
+      },
+      "id": "7c37b4cc-eb50-4319-8526-23a322d8e8e2",
+      "name": "Basic LLM Chain",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1,
+      "position": [
+        368,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "217d06a9-c99d-40a8-8e6b-766513b828d1",
+      "name": "Google Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        368,
+        128
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "YoE88NOLwRInHR5L",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $input.first().json.text;\nlet parsed;\ntry {\n  const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();\n  parsed = JSON.parse(cleanText);\n} catch (error) {\n  throw new Error(\"Failed to parse Gemini output: \" + text);\n}\n\n// We must return the _id so MongoDB knows exactly which task to update\nreturn { \n  json: { \n    _id: $('Fetch Missed Tasks').first().json._id, \n    scheduled_start: parsed.scheduled_start, \n    scheduled_end: parsed.scheduled_end,\n    reasoning: parsed.reasoning\n  } \n};"
+      },
+      "id": "26a78f7f-2715-4326-bca9-c15159d9fd13",
+      "name": "Parse Reschedule JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "collection": "tasks",
+        "updateKey": "_id",
+        "fields": "scheduled_start, scheduled_end",
+        "options": {}
+      },
+      "id": "7d4e7769-4ae2-466a-9393-81564fb91cc1",
+      "name": "Update Task in DB",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        960,
+        -80
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "tb8iGFtr3vF48hCx",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ghost-reschedule-now",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -448,
+        -256
+      ],
+      "id": "822cb5fe-4934-4a0e-b3f0-c1aa725138d5",
+      "name": "Webhook",
+      "webhookId": "bdaa2ef9-e135-4076-9698-7905bcc6a667",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "uNqf9GxmCZJBVtJf",
+          "name": "Header Auth account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Every Hour": {
+      "main": [
+        [
+          {
+            "node": "Fetch Missed Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Missed Tasks": {
+      "main": [
+        [
+          {
+            "node": "Fetch User Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch User Profile": {
+      "main": [
+        [
+          {
+            "node": "Fetch Existing Schedule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Existing Schedule": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Parse Reschedule JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Reschedule JSON": {
+      "main": [
+        [
+          {
+            "node": "Update Task in DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Fetch Missed Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "db700af3-8bdc-4ac4-9d71-85ffc57639e5",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "9c250e28fcafbab121477a9d65241698e6bacdf9c8ab0799162d4f5881da04e7"
+  },
+  "id": "OlUYvI1q12bUBnHE",
+  "tags": []
+}

@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  # 1. THE BRAIN (Ollama with GPU)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: lifesync_brain
+    ports:
+      - "11434:11434"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    volumes:
+      - ollama_storage:/root/.ollama
+    networks:
+      - lifesync_net
+    restart: always
+
+  # 2. THE ORCHESTRATOR (n8n)
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: lifesync_n8n
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=localhost
+      - WEBHOOK_URL=http://localhost:5678
+      - GENERIC_TIMEZONE=Asia/Taipei
+    volumes:
+      - n8n_storage:/home/node/.n8n
+    networks:
+      - lifesync_net
+    restart: always
+
+  # 3. THE MEMORY (MongoDB)
+  mongodb:
+    image: mongo:latest
+    container_name: lifesync_db
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_storage:/data/db
+    networks:
+      - lifesync_net
+    restart: always
+
+# Define the persistent storage volumes
+volumes:
+  ollama_storage:
+  n8n_storage:
+  mongo_storage:
+
+networks:
+  lifesync_net:
+    driver: bridge
