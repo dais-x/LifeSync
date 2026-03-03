@@ -358,7 +358,7 @@
                             {/if}
                         </div>
                         <div class="task-actions">
-                            <button class="options-btn" on:click={() => toggleTaskMenu(task.id)} title="Task options">
+                            <button class="options-btn" on:click={(e) => { e.stopPropagation(); toggleTaskMenu(task.id); }} title="Task options">
                                 <i class="bx bx-dots-horizontal-rounded"></i>
                             </button>
                             {#if activeMenu === task.id}
@@ -396,7 +396,7 @@
                             {/if}
                         </div>
                         <div class="task-actions">
-                            <button class="options-btn" on:click={() => toggleTaskMenu(task.id)} title="Task options">
+                            <button class="options-btn" on:click={(e) => { e.stopPropagation(); toggleTaskMenu(task.id); }} title="Task options">
                                 <i class="bx bx-dots-horizontal-rounded"></i>
                             </button>
                             {#if activeMenu === task.id}
@@ -422,7 +422,7 @@
                     <div class="card-header-actions">
                         <h4>{task.name}</h4>
                         <div class="task-actions">
-                            <button class="options-btn" on:click={() => toggleTaskMenu(task.id)} title="Task options">
+                            <button class="options-btn" on:click={(e) => { e.stopPropagation(); toggleTaskMenu(task.id); }} title="Task options">
                                 <i class="bx bx-dots-horizontal-rounded"></i>
                             </button>
                             {#if activeMenu === task.id}
