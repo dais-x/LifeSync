@@ -1,11 +1,14 @@
 <script>
 	import { onMount } from 'svelte';
 	import Chart from 'chart.js/auto';
+	import Notification from '$lib/Notification.svelte';
 
 	let energyChartCanvas;
 	let chartInstance;
+	let showWelcomeNotification = $state(false);
 
 	onMount(() => {
+		showWelcomeNotification = true;
 		if (energyChartCanvas) {
 			chartInstance = new Chart(energyChartCanvas, {
 				type: 'line',
@@ -39,306 +42,148 @@
 	});
 </script>
 
-<svelte:head>
-	<link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet" />
-</svelte:head>
+{#if showWelcomeNotification}
+	<Notification message="Welcome back! Your energy is peaking." />
+{/if}
 
-<div class="app-container fade-in">
-	<aside class="sidebar">
-		<div class="sidebar-header">
-			<i class="bx bxs-bolt accent-icon"></i>
-			<span>LifeSync</span>
+<header class="top-header">
+	<div class="header-left">
+		<h2>Dashboard</h2>
+		<p class="status-indicator">
+			<span class="pulse-dot"></span> High Energy Window • 10:42 AM
+		</p>
+	</div>
+	<div class="header-right">
+		<div class="search-bar">
+			<i class="bx bx-search"></i>
+			<input type="text" placeholder="Search..." aria-label="Search" />
 		</div>
-		<nav class="sidebar-nav">
-			<button class="nav-item active" aria-label="Dashboard">
-				<i class="bx bxs-dashboard"></i> Dashboard
-			</button>
-			<button class="nav-item" aria-label="Schedule">
-				<i class="bx bx-calendar"></i> Schedule
-			</button>
-			<button class="nav-item" aria-label="Tasks">
-				<i class="bx bx-task"></i> Tasks
-			</button>
-			<button class="nav-item" aria-label="AI Insights">
-				<i class="bx bx-brain"></i> AI Insights
-			</button>
-			<button class="nav-item" aria-label="Health">
-				<i class="bx bx-pulse"></i> Health
-			</button>
-			<button class="nav-item" aria-label="Settings">
-				<i class="bx bx-cog"></i> Settings
-			</button>
-		</nav>
-		<div class="sidebar-footer">
-			<a href="/login" class="logout-btn" aria-label="Log Out">
-				<i class="bx bx-log-out"></i> Log Out
-			</a>
+		<div class="avatar">FS</div>
+	</div>
+</header>
+
+<div class="dashboard-scroll scroll-area">
+	<div class="stats-grid">
+		<div class="stat-card">
+			<div class="stat-header">
+				<span>Tasks Today</span>
+				<i class="bx bx-check-square icon-bg purple"></i>
+			</div>
+			<div class="stat-value">8</div>
+			<div class="stat-sub">3 completed</div>
 		</div>
-	</aside>
-
-	<main class="main-content">
-		<header class="top-header">
-			<div class="header-left">
-				<h2>Dashboard</h2>
-				<p class="status-indicator">
-					<span class="pulse-dot"></span> High Energy Window • 10:42 AM
-				</p>
+		<div class="stat-card">
+			<div class="stat-header">
+				<span>Focus Time</span>
+				<i class="bx bx-time icon-bg blue"></i>
 			</div>
-			<div class="header-right">
-				<div class="search-bar">
-					<i class="bx bx-search"></i>
-					<input type="text" placeholder="Search..." aria-label="Search" />
-				</div>
-				<div class="avatar">FS</div>
+			<div class="stat-value">4.2h</div>
+			<div class="stat-sub green-text"><i class="bx bx-up-arrow-alt"></i> +12% vs avg</div>
+		</div>
+		<div class="stat-card border-green">
+			<div class="stat-header">
+				<span>Energy</span>
+				<i class="bx bxs-battery-charging icon-bg green"></i>
 			</div>
-		</header>
+			<div class="stat-value green-text">High</div>
+			<div class="stat-sub">Peak at 10am</div>
+		</div>
+		<div class="stat-card">
+			<div class="stat-header">
+				<span>Streak</span>
+				<i class="bx bx-trending-up icon-bg orange"></i>
+			</div>
+			<div class="stat-value">12 <span class="unit">days</span></div>
+			<div class="stat-sub">Personal best</div>
+		</div>
+	</div>
 
-		<div class="dashboard-scroll">
-			<div class="stats-grid">
-				<div class="stat-card">
-					<div class="stat-header">
-						<span>Tasks Today</span>
-						<i class="bx bx-check-square icon-bg purple"></i>
-					</div>
-					<div class="stat-value">8</div>
-					<div class="stat-sub">3 completed</div>
+	<div class="input-wrapper">
+		<i class="bx bx-microphone mic-icon"></i>
+		<input
+			type="text"
+			placeholder="Type or speak to capture a thought..."
+			aria-label="Capture thought"
+		/>
+		<button class="send-btn" aria-label="Send thought"><i class="bx bx-send"></i></button>
+	</div>
+
+	<div class="widget-grid">
+		<div class="widget tasks-widget">
+			<div class="widget-header">
+				<h3>Priority Tasks</h3>
+				<span>1/7</span>
+			</div>
+			<div class="task-list">
+				<div class="task-item">
+					<div class="circle"></div>
+					<span class="task-text">Finish API integration for auth module</span>
+					<span class="tag">LifeSync</span>
 				</div>
-				<div class="stat-card">
-					<div class="stat-header">
-						<span>Focus Time</span>
-						<i class="bx bx-time icon-bg blue"></i>
-					</div>
-					<div class="stat-value">4.2h</div>
-					<div class="stat-sub green-text"><i class="bx bx-up-arrow-alt"></i> +12% vs avg</div>
+				<div class="task-item completed">
+					<div class="circle checked"><i class="bx bx-check"></i></div>
+					<span class="task-text">Write unit tests</span>
 				</div>
-				<div class="stat-card border-green">
-					<div class="stat-header">
-						<span>Energy</span>
-						<i class="bx bxs-battery-charging icon-bg green"></i>
-					</div>
-					<div class="stat-value green-text">High</div>
-					<div class="stat-sub">Peak at 10am</div>
+				<div class="task-item">
+					<div class="circle"></div>
+					<span class="task-text">Research vector DB options</span>
+					<span class="tag">AI</span>
+					<i class="bx bx-down-arrow-alt arrow-icon"></i>
 				</div>
-				<div class="stat-card">
-					<div class="stat-header">
-						<span>Streak</span>
-						<i class="bx bx-trending-up icon-bg orange"></i>
+			</div>
+		</div>
+
+		<div class="side-widgets">
+			<div class="widget notification-widget">
+				<div class="widget-header">
+					<h3>Recent Notifications</h3>
+					<i class="bx bx-bell" style="color: var(--accent-orange)"></i>
+				</div>
+				<div class="notification-list">
+					<div class="notif-card">
+						<div class="notif-dot"></div>
+						<div class="notif-content">
+							<p class="notif-title">Upcoming Period</p>
+							<p class="notif-time">In 3 days • Health</p>
+						</div>
 					</div>
-					<div class="stat-value">12 <span class="unit">days</span></div>
-					<div class="stat-sub">Personal best</div>
+					<div class="notif-card">
+						<div class="notif-dot silent"></div>
+						<div class="notif-content">
+							<p class="notif-title">Daily Summary Ready</p>
+							<p class="notif-time">8:00 AM • Insight</p>
+						</div>
+					</div>
 				</div>
 			</div>
 
-			<div class="input-wrapper">
-				<i class="bx bx-microphone mic-icon"></i>
-				<input
-					type="text"
-					placeholder="Type or speak to capture a thought..."
-					aria-label="Capture thought"
-				/>
-				<button class="send-btn" aria-label="Send thought"><i class="bx bx-send"></i></button>
-			</div>
-
-			<div class="widget-grid">
-				<div class="widget tasks-widget">
-					<div class="widget-header">
-						<h3>Priority Tasks</h3>
-						<span>1/7</span>
-					</div>
-					<div class="task-list">
-						<div class="task-item">
-							<div class="circle"></div>
-							<span class="task-text">Finish API integration for auth module</span>
-							<span class="tag">LifeSync</span>
-						</div>
-						<div class="task-item completed">
-							<div class="circle checked"><i class="bx bx-check"></i></div>
-							<span class="task-text">Write unit tests</span>
-						</div>
-						<div class="task-item">
-							<div class="circle"></div>
-							<span class="task-text">Research vector DB options</span>
-							<span class="tag">AI</span>
-							<i class="bx bx-down-arrow-alt arrow-icon"></i>
-						</div>
-					</div>
+			<div class="widget chart-widget">
+				<h3>Energy Curve</h3>
+				<div class="chart-container">
+					<canvas bind:this={energyChartCanvas}></canvas>
 				</div>
-
-				<div class="side-widgets">
-					<div class="widget chart-widget">
-						<h3>Energy Curve</h3>
-						<div class="chart-container">
-							<canvas bind:this={energyChartCanvas}></canvas>
+			</div>
+			<div class="widget deadlines-widget">
+				<h3>Deadlines</h3>
+				<div class="deadline-list">
+					<div class="deadline-item">
+						<div class="deadline-title red-text">
+							<i class="bx bx-error-circle"></i> API Integration
 						</div>
+						<span class="time-left">3h left</span>
 					</div>
-					<div class="widget deadlines-widget">
-						<h3>Deadlines</h3>
-						<div class="deadline-list">
-							<div class="deadline-item">
-								<div class="deadline-title red-text">
-									<i class="bx bx-error-circle"></i> API Integration
-								</div>
-								<span class="time-left">3h left</span>
-							</div>
-							<div class="deadline-item">
-								<div class="deadline-title"><i class="bx bx-time"></i> CI/CD Setup</div>
-								<span class="time-left">8h left</span>
-							</div>
-						</div>
+					<div class="deadline-item">
+						<div class="deadline-title"><i class="bx bx-time"></i> CI/CD Setup</div>
+						<span class="time-left">8h left</span>
 					</div>
 				</div>
 			</div>
 		</div>
-	</main>
-
-	<nav class="mobile-nav">
-		<button class="mob-item active" aria-label="Dashboard">
-			<i class="bx bxs-dashboard"></i> <span>Home</span>
-		</button>
-		<button class="mob-item" aria-label="Plan">
-			<i class="bx bx-calendar"></i> <span>Plan</span>
-		</button>
-		<button class="mob-item" aria-label="Tasks">
-			<i class="bx bx-task"></i> <span>Tasks</span>
-		</button>
-		<button class="mob-item" aria-label="AI">
-			<i class="bx bx-brain"></i> <span>AI</span>
-		</button>
-		<button class="mob-item" aria-label="Health">
-			<i class="bx bx-pulse"></i> <span>Health</span>
-		</button>
-	</nav>
+	</div>
 </div>
 
 <style>
-	/* --- CSS VARIABLES --- */
-	:root {
-		--bg-dark: #0b0c15;
-		--card-bg: #151621;
-		--card-hover: #1e1f2e;
-		--border-color: #2a2b3d;
-		--text-white: #ffffff;
-		--text-gray: #9ca3af;
-		--accent-purple: #6366f1;
-		--accent-green: #22c55e;
-		--accent-blue: #3b82f6;
-		--accent-orange: #f59e0b;
-		--accent-red: #ef4444;
-	}
-
-	/* --- LAYOUT --- */
-	.app-container {
-		display: flex;
-		height: 100vh;
-		background-color: var(--bg-dark);
-		color: var(--text-gray);
-		font-family: 'Inter', sans-serif;
-		overflow: hidden;
-	}
-
-	.fade-in {
-		animation: fadeIn 0.4s ease-out forwards;
-	}
-	@keyframes fadeIn {
-		from {
-			opacity: 0;
-			transform: translateY(10px);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
-	}
-
-	/* --- SIDEBAR (Desktop) --- */
-	.sidebar {
-		width: 16rem;
-		background-color: var(--card-bg);
-		border-right: 1px solid var(--border-color);
-		display: flex;
-		flex-direction: column;
-	}
-	.sidebar-header {
-		height: 4rem;
-		display: flex;
-		align-items: center;
-		padding: 0 1.5rem;
-		border-bottom: 1px solid var(--border-color);
-		font-size: 1.25rem;
-		font-weight: 700;
-		color: var(--text-white);
-	}
-	.accent-icon {
-		color: var(--accent-purple);
-		margin-right: 0.5rem;
-	}
-
-	.sidebar-nav {
-		padding: 1.5rem 0.75rem;
-		flex: 1;
-	}
-	.nav-item {
-		width: 100%;
-		display: flex;
-		align-items: center;
-		padding: 0.75rem;
-		margin-bottom: 0.25rem;
-		background: none;
-		border: none;
-		color: var(--text-gray);
-		font-size: 0.875rem;
-		font-weight: 500;
-		border-radius: 0.375rem;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.nav-item i {
-		font-size: 1.25rem;
-		margin-right: 0.75rem;
-	}
-	.nav-item:hover {
-		background-color: var(--card-hover);
-		color: var(--text-white);
-	}
-	.nav-item.active {
-		background-color: rgba(99, 102, 241, 0.1);
-		color: var(--accent-purple);
-		border-right: 3px solid var(--accent-purple);
-	}
-
-	.sidebar-footer {
-		padding: 1rem;
-		border-top: 1px solid var(--border-color);
-	}
-	.logout-btn {
-		display: flex;
-		align-items: center;
-		width: 100%;
-		padding: 0.5rem;
-		color: var(--text-gray);
-		text-decoration: none;
-		font-size: 0.875rem;
-		background: none;
-		border: none;
-		cursor: pointer;
-	}
-	.logout-btn:hover {
-		color: var(--accent-red);
-	}
-	.logout-btn i {
-		margin-right: 0.75rem;
-	}
-
-	/* --- MAIN CONTENT --- */
-	.main-content {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-		overflow: hidden;
-		background-color: #0b0c15; /* Ensure dark background */
-	}
-
-	/* HEADER */
+	/* --- HEADER --- */
 	.top-header {
 		height: 4rem;
 		display: flex;
@@ -346,7 +191,7 @@
 		justify-content: space-between;
 		padding: 0 2rem;
 		border-bottom: 1px solid var(--border-color);
-		background-color: #0b0c15;
+		background-color: var(--bg-dark);
 	}
 	.header-left h2 {
 		color: var(--text-white);
@@ -554,6 +399,38 @@
 		color: var(--text-white);
 	}
 
+	/* NOTIFICATION WIDGET */
+	.notif-card {
+		display: flex;
+		align-items: center;
+		padding: 0.75rem;
+		background: rgba(255, 255, 255, 0.03);
+		border-radius: 0.5rem;
+		margin-bottom: 0.5rem;
+		border-left: 3px solid var(--accent-orange);
+	}
+	.notif-dot {
+		width: 0.5rem;
+		height: 0.5rem;
+		background: var(--accent-orange);
+		border-radius: 50%;
+		margin-right: 0.75rem;
+	}
+	.notif-dot.silent {
+		background: var(--text-gray);
+	}
+	.notif-title {
+		color: var(--text-white);
+		font-size: 0.85rem;
+		font-weight: 500;
+		margin: 0;
+	}
+	.notif-time {
+		color: var(--text-gray);
+		font-size: 0.7rem;
+		margin: 0.2rem 0 0 0;
+	}
+
 	/* TASKS */
 	.tasks-widget {
 		min-height: 400px;
@@ -651,38 +528,6 @@
 		color: #6b7280;
 	}
 
-	/* --- MOBILE NAV --- */
-	.mobile-nav {
-		display: none;
-		position: fixed;
-		bottom: 0;
-		left: 0;
-		right: 0;
-		background-color: var(--card-bg);
-		border-top: 1px solid var(--border-color);
-		padding: 0.5rem 0;
-		justify-content: space-around;
-		z-index: 50;
-	}
-	.mob-item {
-		background: none;
-		border: none;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		color: var(--text-gray);
-		font-size: 0.6rem;
-		cursor: pointer;
-	}
-	.mob-item i {
-		font-size: 1.25rem;
-		margin-bottom: 0.2rem;
-	}
-	.mob-item.active {
-		color: var(--accent-purple);
-	}
-
-	/* --- RESPONSIVE QUERIES --- */
 	@media (min-width: 1024px) {
 		.search-bar {
 			display: block;
@@ -693,20 +538,8 @@
 	}
 
 	@media (max-width: 768px) {
-		.sidebar {
-			display: none;
-		}
-		.mobile-nav {
-			display: flex;
-		}
-		.main-content {
-			padding-bottom: 4rem;
-		} /* Space for nav */
 		.top-header {
 			padding: 0 1rem;
-		}
-		.dashboard-scroll {
-			padding: 1rem;
 		}
 		.search-bar {
 			display: none;
