@@ -3,9 +3,9 @@
     import Notification from '$lib/Notification.svelte';
 
     // --- API CONFIGURATION ---
-    const SEND_URL = 'https://fahim-n8n.laddu.cc/webhook-test/sync-task';
-    const GET_URL = 'https://fahim-n8n.laddu.cc/webhook-test/get-tasks';
-    const MANAGE_URL = 'https://fahim-n8n.laddu.cc/webhook-test/manage-task';
+    const SEND_URL = 'https://fahim-n8n.laddu.cc/webhook/sync-task';
+    const GET_URL = 'https://fahim-n8n.laddu.cc/webhook/get-tasks';
+    const MANAGE_URL = 'https://fahim-n8n.laddu.cc/webhook/manage-task';
     const CURRENT_USER_ID = "user_456"; 
 
     let showAddTaskPopup = $state(false);

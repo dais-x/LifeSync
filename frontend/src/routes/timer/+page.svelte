@@ -2,10 +2,15 @@
 	import { onDestroy } from 'svelte';
 
 	// Timer Configuration
-	let mode = 'pomodoro'; // 'pomodoro', '5217', 'custom'
-	let isWorkPhase = true;
-	let isRunning = false;
+	let mode = $state('pomodoro'); // 'pomodoro', '5217', 'custom'
+	let isWorkPhase = $state(true);
+	let isRunning = $state(false);
 	let timerInterval;
+
+	// Session Logging State
+	let sessionLogs = $state([]);
+	let currentSessionStart = $state(null);
+	let showLog = $state(false);
 
 	// Presets (in seconds)
 	const presets = {
@@ -15,31 +20,46 @@
 	};
 
 	// Current State
-	let timeLeft = presets[mode].work;
+	let timeLeft = $state(presets[mode].work);
 
 	// Custom Input Bindings (in minutes for the UI)
-	let customWorkMin = 45;
-	let customBreakMin = 15;
+	let customWorkMin = $state(45);
+	let customBreakMin = $state(15);
 
 	// Formatting for the Flip Clock
-	$: minutes = String(Math.floor(timeLeft / 60)).padStart(2, '0');
-	$: seconds = String(timeLeft % 60).padStart(2, '0');
+	let minutes = $derived(String(Math.floor(timeLeft / 60)).padStart(2, '0'));
+	let seconds = $derived(String(timeLeft % 60).padStart(2, '0'));
 
 	// Derived UI states
-	$: currentPhaseText = isWorkPhase ? 'Focus Time' : 'Break Time';
-	$: accentColor = isWorkPhase ? 'var(--accent-purple)' : 'var(--accent-green)';
+	let currentPhaseText = $derived(isWorkPhase ? 'Focus Time' : 'Break Time');
+	let accentColor = $derived(isWorkPhase ? 'var(--accent-purple)' : 'var(--accent-green)');
+
+	// Log Computations
+	let totalFocusTime = $derived(sessionLogs.reduce((acc, log) => acc + (log.endTime.getTime() - log.startTime.getTime()), 0));
+
+	function formatDuration(ms) {
+		if (ms < 0) ms = 0;
+		const hours = Math.floor(ms / 3600000);
+		const minutes = Math.floor((ms % 3600000) / 60000);
+		const seconds = Math.floor((ms % 60000) / 1000);
+		return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+	}
+
+	function formatTime(date) {
+		return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+	}
 
 	function switchMode(newMode) {
 		mode = newMode;
 		isWorkPhase = true;
+		resetTimer();
+		pauseTimer();
 
 		if (mode === 'custom') {
 			updateCustomTime();
 		} else {
 			timeLeft = presets[mode].work;
 		}
-
-		pauseTimer();
 	}
 
 	function updateCustomTime() {
@@ -60,6 +80,9 @@
 
 	function startTimer() {
 		if (isRunning) return;
+		if (isWorkPhase && !currentSessionStart) {
+			currentSessionStart = new Date();
+		}
 		isRunning = true;
 		timerInterval = setInterval(() => {
 			if (timeLeft > 0) {
@@ -76,6 +99,7 @@
 	}
 
 	function resetTimer() {
+		endFocusSession();
 		pauseTimer();
 		timeLeft = isWorkPhase ? presets[mode].work : presets[mode].break;
 	}
@@ -85,7 +109,19 @@
 		skipPhase();
 	}
 
+	function endFocusSession() {
+		if (isWorkPhase && currentSessionStart) {
+			const endTime = new Date();
+			// Only log sessions longer than a minute
+			if (endTime.getTime() - currentSessionStart.getTime() > 60000) {
+				sessionLogs = [...sessionLogs, { startTime: currentSessionStart, endTime }];
+			}
+		}
+		currentSessionStart = null;
+	}
+
 	function skipPhase() {
+		endFocusSession();
 		pauseTimer();
 		isWorkPhase = !isWorkPhase;
 		timeLeft = isWorkPhase ? presets[mode].work : presets[mode].break;
@@ -93,6 +129,7 @@
 
 	// Cleanup interval when leaving the route
 	onDestroy(() => {
+		endFocusSession();
 		clearInterval(timerInterval);
 	});
 </script>
@@ -100,16 +137,52 @@
 <div class="scroll-area fade-in">
 	<div class="header-actions">
 		<h2>Focus Timer</h2>
-		<div
-			class="phase-badge"
-			style="background: {isWorkPhase
-				? 'rgba(99, 102, 241, 0.1)'
-				: 'rgba(34, 197, 94, 0.1)'}; border-color: {accentColor}; color: {accentColor}"
-		>
-			<i class={isWorkPhase ? 'bx bxs-brain' : 'bx bxs-coffee'}></i>
-			{currentPhaseText}
-		</div>
+		<button class="log-btn" on:click={() => showLog = true}>
+			<i class='bx bx-history'></i> View Log
+		</button>
 	</div>
+	<div
+		class="phase-badge"
+		style="background: {isWorkPhase
+			? 'rgba(99, 102, 241, 0.1)'
+			: 'rgba(34, 197, 94, 0.1)'}; border-color: {accentColor}; color: {accentColor}"
+	>
+		<i class={isWorkPhase ? 'bx bxs-brain' : 'bx bxs-coffee'}></i>
+		{currentPhaseText}
+	</div>
+
+	{#if showLog}
+		<div class="modal-backdrop" on:click={() => showLog = false}>
+			<div class="modal-content" on:click|stopPropagation>
+				<div class="modal-header">
+					<h3><i class='bx bx-history'></i> Study Log</h3>
+					<button class="close-modal" on:click={() => showLog = false}><i class='bx bx-x'></i></button>
+				</div>
+				<div class="log-summary">
+					<h4>Total Focus Time</h4>
+					<div class="total-time">{formatDuration(totalFocusTime)}</div>
+				</div>
+				<div class="log-list">
+					{#if sessionLogs.length === 0}
+						<p class="empty-log">No focus sessions logged yet. Start the timer to begin!</p>
+					{:else}
+						{#each sessionLogs.slice().reverse() as log, i}
+							<div class="log-item">
+								<div class="log-item-header">
+									<span class="log-item-title">Session {sessionLogs.length - i}</span>
+									<span class="log-item-duration">Duration: {formatDuration(log.endTime.getTime() - log.startTime.getTime())}</span>
+								</div>
+								<div class="log-item-body">
+									<span>Start: {formatTime(log.startTime)}</span>
+									<span>End: {formatTime(log.endTime)}</span>
+								</div>
+							</div>
+						{/each}
+					{/if}
+				</div>
+			</div>
+		</div>
+	{/if}
 
 	<div class="timer-container">
 		<div class="mode-selector">
@@ -211,7 +284,25 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		margin-bottom: 2rem;
+		margin-bottom: 1rem;
+	}
+	.log-btn {
+		background: none;
+		border: 1px solid var(--border-color);
+		color: var(--text-gray);
+		padding: 0.5rem 1rem;
+		border-radius: 0.5rem;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.85rem;
+		font-weight: 500;
+		transition: all 0.2s;
+	}
+	.log-btn:hover {
+		background: var(--card-bg);
+		color: white;
 	}
 	h2 {
 		color: white;
@@ -223,10 +314,116 @@
 		border: 1px solid;
 		font-size: 0.85rem;
 		font-weight: 600;
-		display: flex;
+		display: inline-flex;
 		align-items: center;
 		gap: 0.5rem;
 		transition: all 0.3s ease;
+		margin-bottom: 2rem;
+	}
+
+	/* Log Modal Styles */
+	.modal-backdrop {
+		position: fixed;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		background: rgba(0, 0, 0, 0.7);
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		z-index: 100;
+		backdrop-filter: blur(4px);
+	}
+	.modal-content {
+		background: var(--card-bg);
+		border-radius: 1rem;
+		padding: 2rem;
+		width: 90%;
+		max-width: 500px;
+		border: 1px solid var(--border-color);
+		max-height: 80vh;
+		display: flex;
+		flex-direction: column;
+	}
+	.modal-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 1.5rem;
+		padding-bottom: 1rem;
+		border-bottom: 1px solid var(--border-color);
+	}
+	.modal-header h3 {
+		margin: 0;
+		color: white;
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+	}
+	.close-modal {
+		background: none;
+		border: none;
+		color: var(--text-gray);
+		font-size: 1.5rem;
+		cursor: pointer;
+	}
+	.log-summary {
+		text-align: center;
+		margin-bottom: 2rem;
+	}
+	.log-summary h4 {
+		margin: 0 0 0.5rem;
+		color: var(--text-gray);
+		font-size: 0.9rem;
+		text-transform: uppercase;
+		font-weight: 500;
+	}
+	.total-time {
+		font-size: 2.5rem;
+		color: white;
+		font-weight: 700;
+		font-family: 'Inter', monospace;
+	}
+	.log-list {
+		flex: 1;
+		overflow-y: auto;
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+		padding-right: 0.5rem;
+	}
+	.empty-log {
+		text-align: center;
+		color: var(--text-gray);
+		padding: 2rem;
+	}
+	.log-item {
+		background: #1e1f2e;
+		padding: 1rem;
+		border-radius: 0.75rem;
+		border: 1px solid var(--border-color);
+	}
+	.log-item-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 0.5rem;
+	}
+	.log-item-title {
+		color: white;
+		font-weight: 600;
+	}
+	.log-item-duration {
+		font-size: 0.8rem;
+		color: var(--text-gray);
+		font-family: 'Inter', monospace;
+	}
+	.log-item-body {
+		display: flex;
+		justify-content: space-between;
+		font-size: 0.85rem;
+		color: var(--text-gray);
 	}
 
 	/* Timer Container Card */

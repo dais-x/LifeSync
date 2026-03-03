@@ -93,6 +93,25 @@
         </a>
 
         <!-- =========================================================================== -->
+        <!-- HYDRATION CARD                                                          -->
+        <!-- =========================================================================== -->
+        <a href="/health/hydration" class="card-link">
+            <div class="card relative clickable">
+                <h3><i class='bx bx-droplet' style="color:var(--accent-blue)"></i> Hydration</h3>
+                <div class="hydration-summary">
+                    <div class="hydration-bar">
+                        <div class="hydration-progress" style="width: 45%;"></div>
+                    </div>
+                    <div class="hydration-text">
+                        <span>1.8L / 4.0L</span>
+                        <span>45%</span>
+                    </div>
+                </div>
+                <p class="card-subtitle">Track your daily water intake.</p>
+            </div>
+        </a>
+
+        <!-- =========================================================================== -->
         <!-- CYCLE PHASE CARD (Now links to the new route)                             -->
         <!-- =========================================================================== -->
         {#if $userFormData.cycle_tracking}
@@ -226,4 +245,34 @@
     /* Fade-in Animation */
     .fade-in { animation: fadeIn 0.4s ease-out forwards; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* Added Hydration Styles */
+    .hydration-summary {
+        margin-top: auto;
+        padding-top: 1rem;
+    }
+    .hydration-bar {
+        width: 100%;
+        height: 8px;
+        background: #1E1F2E;
+        border-radius: 4px;
+        overflow: hidden;
+        margin-bottom: 0.5rem;
+    }
+    .hydration-progress {
+        height: 100%;
+        background: var(--accent-blue);
+        border-radius: 4px;
+    }
+    .hydration-text {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.8rem;
+        color: var(--text-gray);
+    }
+    .card-subtitle {
+        font-size: 0.85rem;
+        color: var(--text-gray);
+        margin-top: 1rem;
+    }
 </style>

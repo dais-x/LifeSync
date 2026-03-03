@@ -15,46 +15,82 @@
 		name: '',
 		directions: ['0', '0', '0', '0'],
 		expiry: '',
+		endDate: '',
 		food: 'any',
         currentStock: 0
 	});
 
 	async function startCamera() {
-		const scanBox = document.getElementById('medicine-scan-box');
-		if (!scanBox) return;
-		
-		const rect = scanBox.getBoundingClientRect();
-
-		// Capacitor Camera Preview works best when we make everything transparent
-		// and put the camera in the back.
-		const cameraPreviewOptions = {
-			position: 'rear',
-			x: rect.left,
-			y: rect.top,
-			width: rect.width,
-			height: rect.height,
-			toBack: true, // Place behind webview
-			parent: 'medicine-scan-box',
-			className: 'camera-preview',
-			disableExifHeaderRestore: true
-		};
-
 		try {
-			await CameraPreview.start(cameraPreviewOptions);
-			cameraActive = true;
-			// Force transparency on all parents
+			const permissions = await Camera.requestPermissions();
+			if (permissions.camera !== 'granted') {
+				alert('Camera permission denied');
+				return;
+			}
+
+			// Full screen dimensions
+			const width = window.innerWidth;
+			const height = window.innerHeight;
+
+			document.documentElement.classList.add('camera-mode');
 			document.body.classList.add('camera-mode');
-		} catch (e) {
-			console.error('Error starting camera preview', e);
+
+			const cameraPreviewOptions = {
+				position: 'rear',
+				x: 0,
+				y: 0,
+				width: width,
+				height: height,
+				toBack: true,
+				storeToFile: false,
+				disableExifHeaderRestore: true,
+				className: 'camera-active'
+			};
+
+			try {
+				await CameraPreview.start(cameraPreviewOptions);
+				cameraActive = true;
+			} catch (e) {
+				console.error('Error starting camera preview', e);
+				stopCamera();
+			}
+		} catch (err) {
+			console.error('Permission check failed', err);
 		}
 	}
 
 	async function stopCamera() {
 		if (cameraActive) {
-			await CameraPreview.stop();
+			try {
+				await CameraPreview.stop();
+			} catch (e) {
+				console.error('Error stopping camera', e);
+			}
 			cameraActive = false;
+			document.documentElement.classList.remove('camera-mode');
 			document.body.classList.remove('camera-mode');
 		}
+	}
+
+	async function processCapturedImage(base64Data) {
+		console.log('Processing captured image...');
+		
+		// Placeholder for sending the image somewhere (e.g., an API or AI service)
+		// For now, it's just a placeholder as requested.
+		const destinationUrl = null; 
+		
+		if (destinationUrl) {
+			try {
+				// Example of how you might send it later:
+				// await fetch(destinationUrl, { method: 'POST', body: JSON.stringify({ image: base64Data }) });
+			} catch (e) {
+				console.error('Failed to send image:', e);
+			}
+		}
+
+		// Placeholder for saving the image locally
+		// If you install @capacitor/filesystem, you can save it to the device here.
+		console.log('Image saved to local state (capturedImage)');
 	}
 
 	async function takePicture() {
@@ -62,12 +98,51 @@
 			const result = await CameraPreview.capture({ quality: 90 });
 			const rawImage = `data:image/jpeg;base64,${result.value}`;
 			
-			// Crop the image to match the scan-box aspect ratio
-			capturedImage = await cropImage(rawImage);
+			const scanBox = document.getElementById('medicine-scan-box');
+			if (scanBox) {
+				const rect = scanBox.getBoundingClientRect();
+				capturedImage = await cropToBox(rawImage, rect);
+			} else {
+				capturedImage = rawImage;
+			}
+			
+			// Process and "send" the image
+			await processCapturedImage(capturedImage);
+			
 			await stopCamera();
 		} catch (error) {
 			console.error('Error taking picture', error);
 		}
+	}
+
+	function cropToBox(base64, rect) {
+		return new Promise((resolve) => {
+			const img = new Image();
+			img.onload = () => {
+				const canvas = document.createElement('canvas');
+				const ctx = canvas.getContext('2d');
+				
+				// Calculate scale between screen and actual image
+				const scaleX = img.width / window.innerWidth;
+				const scaleY = img.height / window.innerHeight;
+				
+				canvas.width = rect.width * scaleX;
+				canvas.height = rect.height * scaleY;
+				
+				ctx.drawImage(
+					img,
+					rect.left * scaleX,
+					rect.top * scaleY,
+					rect.width * scaleX,
+					rect.height * scaleY,
+					0, 0,
+					canvas.width,
+					canvas.height
+				);
+				resolve(canvas.toDataURL('image/jpeg', 0.9));
+			};
+			img.src = base64;
+		});
 	}
 
 	function cropImage(base64) {
@@ -89,12 +164,18 @@
 	}
 
 	function closePopup() {
-		stopCamera();
+		if (cameraActive) stopCamera();
 		showPopup = false;
 		entryMode = null;
 		capturedImage = null;
 		editingMedicine = null;
-		newMed = { nickname: '', name: '', directions: ['0', '0', '0', '0'], expiry: '', food: 'any', currentStock: 0 };
+		newMed = { nickname: '', name: '', directions: ['0', '0', '0', '0'], expiry: '', endDate: '', food: 'any', currentStock: 0 };
+	}
+
+	function deleteMedicine(med) {
+		if (confirm(`Are you sure you want to delete ${med.nickname}?`)) {
+			medicines = medicines.filter(m => m !== med);
+		}
 	}
 
 	function openAddPopup() {
@@ -126,6 +207,26 @@
         if (!$userFormData.health_sync_url || $userFormData.health_sync_url.includes('your-n8n-webhook-url')) {
             console.warn('Health sync URL not configured.');
             return;
+        }
+
+        // Check if restock is needed based on end date
+        if (payload.endDate && payload.currentStock > 0) {
+            const today = new Date();
+            const end = new Date(payload.endDate);
+            const diffTime = end.getTime() - today.getTime();
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            
+            // Total doses per day
+            const dailyDoses = payload.directions.reduce((a, b) => parseInt(a) + parseInt(b), 0);
+            
+            if (dailyDoses > 0) {
+                const daysOfStockLeft = payload.currentStock / dailyDoses;
+                
+                // If stock runs out before the end date, and we are within 3 tablets of running out
+                if (daysOfStockLeft < diffDays && payload.currentStock <= 3) {
+                    alert(`Restock Alert: ${payload.nickname} will run out in ${Math.floor(daysOfStockLeft)} days, but your course ends on ${payload.endDate}. Please restock!`);
+                }
+            }
         }
 
         try {
@@ -175,6 +276,7 @@
 			nickname: 'Happy Pill',
 			name: 'Sertraline',
 			expiry: '2025-12-31',
+			endDate: '2025-06-01',
 			directions: ['1', '0', '0', '0'],
 			food: 'after',
             currentStock: 12
@@ -183,6 +285,7 @@
 			nickname: 'Allergy Fix',
 			name: 'Cetirizine',
 			expiry: '2024-08-15',
+			endDate: '2024-04-15',
 			directions: ['0', '0', '1', '0'],
 			food: 'before',
             currentStock: 28
@@ -191,11 +294,18 @@
 			nickname: 'Pain Away',
 			name: 'Ibuprofen',
 			expiry: '2026-01-20',
+			endDate: '2026-01-30',
 			directions: ['1', '1', '1', '1'],
 			food: 'after',
             currentStock: 4
 		}
 	]);
+    // Helper to format date
+    function formatDate(dateString) {
+        if (!dateString) return '';
+        const options = { year: 'numeric', month: 'long', day: 'numeric' };
+        return new Date(dateString).toLocaleDateString(undefined, options);
+    }
 </script>
 
 <div class="scroll-area fade-in">
@@ -212,8 +322,12 @@
 				<div class="card-header">
 					<h3 class="nickname">{med.nickname}</h3>
 					<div class="card-actions">
-						<div class="expiry">Expires: {med.expiry}</div>
+						<div class="date-info">
+                            <span class="expiry">Exp: {formatDate(med.expiry)}</span>
+                            {#if med.endDate}<span class="end-date">End: {formatDate(med.endDate)}</span>{/if}
+                        </div>
 						<button class="edit-btn" on:click={() => startEdit(med)}><i class='bx bx-pencil'></i></button>
+                        <button class="delete-btn" on:click={() => deleteMedicine(med)}><i class='bx bx-trash'></i></button>
 					</div>
 				</div>
 				<div class="card-body">
@@ -291,6 +405,10 @@
 							<label for="expiry">Expiry Date</label>
 							<input type="date" id="expiry" bind:value={newMed.expiry}>
 						</div>
+                        <div class="form-group">
+							<label for="endDate">Course End Date (Optional)</label>
+							<input type="date" id="endDate" bind:value={newMed.endDate}>
+						</div>
 						<div class="form-group">
 							<label for="food">Timing</label>
 							<select id="food" bind:value={newMed.food}>
@@ -307,14 +425,23 @@
 					</form>
 				{:else if entryMode === 'photo'}
 					{#if !capturedImage}
-						<div class="camera-container" id="camera-preview-container">
+						<div class="camera-container" class:full-screen={cameraActive}>
 							<div class="camera-overlay">
-								<div class="scan-box" id="medicine-scan-box"></div>
+								<div class="scan-box" id="medicine-scan-box">
+                                    <div class="corner tl"></div>
+                                    <div class="corner tr"></div>
+                                    <div class="corner bl"></div>
+                                    <div class="corner br"></div>
+                                </div>
 								<p class="scan-text">Position the medicine label inside the box</p>
+                                <div class="camera-controls">
+                                    <button class="cancel-btn" on:click={() => setEntryMode(null)}>Cancel</button>
+                                    <button class="capture-btn" on:click={takePicture}>
+                                        <div class="inner-circle"></div>
+                                    </button>
+                                    <div class="placeholder"></div>
+                                </div>
 							</div>
-							<button class="capture-btn" on:click={takePicture}>
-								<i class="bx bxs-camera"></i>
-							</button>
 						</div>
 					{:else}
 						<form class="photo-form">
@@ -406,17 +533,31 @@
 		align-items: center;
 		gap: 1rem;
 	}
-    .expiry {
-        font-size: 0.8rem;
+    .expiry, .end-date {
+        font-size: 0.75rem;
         color: var(--text-gray);
+        display: block;
     }
-	.edit-btn {
+    .date-info {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+    }
+	.edit-btn, .delete-btn {
 		background: none;
 		border: none;
 		color: var(--text-gray);
 		font-size: 1.2rem;
 		cursor: pointer;
+        padding: 0.2rem;
+        transition: color 0.2s;
 	}
+    .delete-btn:hover {
+        color: var(--accent-red);
+    }
+    .edit-btn:hover {
+        color: var(--accent-blue);
+    }
     .name {
         font-weight: 500;
         color: #ddd;
@@ -566,24 +707,65 @@
         margin-top: 1rem;
     }
     
+    /* Global styles for camera transparency */
+    :global(html.camera-mode),
+    :global(body.camera-mode),
+    :global(.camera-mode .app-container),
+    :global(.camera-mode .main-content),
+    :global(.camera-mode .scroll-area),
+    :global(.camera-mode .popup-backdrop),
+    :global(.camera-mode .popup),
+    :global(.camera-mode .popup-body),
+    :global(.camera-mode .camera-container) {
+        background: transparent !important;
+        background-color: transparent !important;
+    }
+
+    /* Hide background elements during camera mode */
+    :global(.camera-mode .sidebar),
+    :global(.camera-mode .mobile-nav),
+    :global(.camera-mode .scroll-area .page-header),
+    :global(.camera-mode .scroll-area .grid-layout),
+    :global(.camera-mode .popup-header),
+    :global(.camera-mode .popup-body > p),
+    :global(.camera-mode .popup-body > .choice-buttons) {
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+    }
+
+    /* Ensure the camera container and overlay are visible */
+    :global(.camera-mode .camera-container),
+    :global(.camera-mode .camera-overlay) {
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+
     /* Camera Styles */
     .camera-container {
         position: relative;
         width: 100%;
         aspect-ratio: 1;
-        background: transparent; /* Changed to transparent to see camera behind */
+        background: #000;
         border-radius: 0.5rem;
         display: flex;
         justify-content: center;
         align-items: center;
         overflow: hidden;
     }
-	:global(.camera-preview) {
-		position: absolute;
-		width: 100%;
-		height: 100%;
-		z-index: 10; /* Bring to front over other elements in the scan box */
-	}
+
+    .camera-container.full-screen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 1000;
+        aspect-ratio: auto;
+        border-radius: 0;
+        background: transparent;
+    }
+
     .camera-overlay {
         position: absolute;
         top: 0;
@@ -594,37 +776,87 @@
         flex-direction: column;
         justify-content: center;
         align-items: center;
-        background: rgba(0,0,0,0.6);
-		z-index: 5;
+        background: rgba(0, 0, 0, 0.4); /* Dimmed area */
+        z-index: 5;
     }
+
     .scan-box {
         width: 80%;
         height: 40%;
-        border: 2px solid var(--accent-purple);
+        border: 1px solid rgba(255, 255, 255, 0.3);
         border-radius: 0.5rem;
         background: transparent;
-		position: relative;
-		overflow: hidden;
+        position: relative;
+        box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.5); /* Creates the transparent window effect */
     }
+
+    /* Scan Box Corners */
+    .corner {
+        position: absolute;
+        width: 20px;
+        height: 20px;
+        border-color: var(--accent-purple);
+        border-style: solid;
+    }
+    .tl { top: -2px; left: -2px; border-width: 4px 0 0 4px; border-top-left-radius: 8px; }
+    .tr { top: -2px; right: -2px; border-width: 4px 4px 0 0; border-top-right-radius: 8px; }
+    .bl { bottom: -2px; left: -2px; border-width: 0 0 4px 4px; border-bottom-left-radius: 8px; }
+    .br { bottom: -2px; right: -2px; border-width: 0 4px 4px 0; border-bottom-right-radius: 8px; }
+
     .scan-text {
         color: white;
-        margin-top: 1rem;
+        margin-top: 2rem;
+        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+        font-weight: 500;
     }
-    .capture-btn {
+
+    .camera-controls {
         position: absolute;
-        bottom: 1rem;
-        background: white;
-        border: none;
-        width: 4rem;
-        height: 4rem;
+        bottom: 2rem;
+        left: 0;
+        right: 0;
+        display: flex;
+        justify-content: space-around;
+        align-items: center;
+        padding: 0 2rem;
+    }
+
+    .capture-btn {
+        background: rgba(255, 255, 255, 0.3);
+        border: 4px solid white;
+        width: 5rem;
+        height: 5rem;
         border-radius: 50%;
         cursor: pointer;
         display: flex;
         justify-content: center;
         align-items: center;
-        font-size: 2rem;
-        color: #333;
+        padding: 0;
+        transition: transform 0.1s;
     }
+
+    .capture-btn:active {
+        transform: scale(0.9);
+    }
+
+    .inner-circle {
+        width: 3.8rem;
+        height: 3.8rem;
+        background: white;
+        border-radius: 50%;
+    }
+
+    .cancel-btn {
+        background: none;
+        border: none;
+        color: white;
+        font-size: 1rem;
+        cursor: pointer;
+        font-weight: 600;
+        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+    }
+    
+    .placeholder { width: 4rem; }
     .captured-image {
         width: 100%;
         max-height: 200px;

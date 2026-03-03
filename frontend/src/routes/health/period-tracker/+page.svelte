@@ -23,8 +23,6 @@
 
     let dailyLog = $state({
         date: new Date().toISOString().split('T')[0],
-        startDate: '',
-        endDate: '',
         symptoms: { cramps: 0, headache: 0, nausea: 0, bloating: 0, fatigue: 0, moodSwings: 0, backPain: 0, breastTenderness: 0, acne: 0, flowIntensity: 0 },
         notes: ""
     });
@@ -163,8 +161,6 @@
     function logSymptomsForDay() {
         const entry = {
             date: dailyLog.date,
-            startDate: dailyLog.startDate,
-            endDate: dailyLog.endDate,
             cycleDay: currentDayOfCycle,
             symptoms: { ...dailyLog.symptoms },
             notes: dailyLog.notes
@@ -305,10 +301,7 @@
 
         <div class="card" style="margin-top: 1.5rem;">
             <h3><i class='bx bx-plus-medical' style="color:var(--accent-blue)"></i> Log Daily Symptoms & Notes</h3>
-            <div class="form-grid" style="margin-bottom: 1.5rem;">
-                <label>Period Start Date (if applicable)<input type="date" bind:value={dailyLog.startDate}></label>
-                <label>Period End Date (if applicable)<input type="date" bind:value={dailyLog.endDate}></label>
-            </div>
+            
             <div class="symptom-rating-grid">
                 {#each Object.entries(dailyLog.symptoms) as [symptom, value]}
                 <div class="symptom-item">
