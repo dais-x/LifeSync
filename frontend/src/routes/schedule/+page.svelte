@@ -1,37 +1,86 @@
+<script>
+    import { onMount } from 'svelte';
+
+    const GET_URL = 'https://fahim-n8n.laddu.cc/webhook/get-tasks';
+    let todaysEvents = $state([]);
+
+    async function fetchSchedule() {
+        try {
+            const res = await fetch(GET_URL);
+            if (!res.ok) {
+                console.error("Failed to fetch schedule data, status:", res.status);
+                return;
+            };
+
+            const incoming = await res.json();
+            let allTasks = [];
+            
+            if (incoming.data && Array.isArray(incoming.data)) {
+                allTasks = incoming.data.filter(t => t.isDeleted !== true);
+            } else if (Array.isArray(incoming)) {
+                allTasks = incoming;
+            }
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const endOfToday = new Date();
+            endOfToday.setHours(23, 59, 59, 999);
+
+            todaysEvents = allTasks
+                .map(task => ({
+                    ...task,
+                    deadlineDate: task.deadline ? new Date(task.deadline) : null
+                }))
+                .filter(task => {
+                    if (!task.deadlineDate) return false;
+                    return task.deadlineDate >= today && task.deadlineDate <= endOfToday;
+                })
+                .sort((a, b) => a.deadlineDate - b.deadlineDate);
+        } catch (e) {
+            console.error("Failed to load schedule:", e);
+        }
+    }
+
+    function formatTime(date) {
+        if (!date) return '';
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    }
+    
+    function getCategoryColor(category) {
+        const lowerCategory = (category || '').toLowerCase();
+        if (lowerCategory.includes('work')) return 'blue';
+        if (lowerCategory.includes('study')) return 'purple';
+        if (lowerCategory.includes('fitness')) return 'green';
+        if (lowerCategory.includes('home')) return 'orange';
+        return 'grey';
+    }
+
+    onMount(fetchSchedule);
+</script>
+
 <div class="scroll-area fade-in">
 	<h2 class="page-title">Today's Timeline</h2>
 
 	<div class="timeline-container">
 		<div class="timeline-line"></div>
 
-		<div class="time-slot">
-			<div class="time-label">09:00</div>
-			<div class="event-card purple">
-				<div class="event-title">Deep Work: Architecture</div>
-				<div class="event-desc">High Energy Block</div>
-			</div>
-		</div>
-
-		<div class="time-slot">
-			<div class="time-label">10:00</div>
-			<div class="empty-line"></div>
-		</div>
-
-		<div class="time-slot">
-			<div class="time-label">11:00</div>
-			<div class="event-card blue">
-				<div class="event-title">Team Standup</div>
-				<div class="event-desc">Google Meet</div>
-			</div>
-		</div>
-
-		<div class="time-slot">
-			<div class="time-label">12:00</div>
-			<div class="event-card green">
-				<div class="event-title">Lunch & Recharge</div>
-				<div class="event-desc">No Screens</div>
-			</div>
-		</div>
+        {#if todaysEvents.length === 0}
+            <div class="empty-state">
+                <i class='bx bx-calendar-check'></i>
+                <p>Nothing scheduled for today. Enjoy your free day!</p>
+            </div>
+        {:else}
+            {#each todaysEvents as event}
+                <div class="time-slot">
+                    <div class="time-label">{formatTime(event.deadlineDate)}</div>
+                    <div class="event-card {getCategoryColor(event.category)}">
+                        <div class="event-title">{event.title}</div>
+                        <div class="event-desc">{event.category || 'No category'}</div>
+                    </div>
+                </div>
+            {/each}
+        {/if}
 	</div>
 </div>
 
@@ -43,6 +92,7 @@
 	.timeline-container {
 		position: relative;
 		padding-left: 3rem;
+        min-height: 50vh;
 	}
 	.timeline-line {
 		position: absolute;
@@ -68,11 +118,11 @@
 	.event-card {
 		flex: 1;
 		margin-left: 2rem;
-		padding: 0.75rem;
-		border-left: 2px solid;
+		padding: 0.75rem 1rem;
+		border-left: 3px solid;
 		border-radius: 0.25rem;
-		background: rgba(255, 255, 255, 0.03);
 	}
+    /* Color coding for different categories */
 	.event-card.purple {
 		border-color: var(--accent-purple);
 		background: rgba(99, 102, 241, 0.1);
@@ -85,6 +135,15 @@
 		border-color: var(--accent-green);
 		background: rgba(34, 197, 94, 0.1);
 	}
+    .event-card.orange {
+		border-color: var(--accent-orange);
+		background: rgba(251, 146, 60, 0.1);
+	}
+    .event-card.grey {
+		border-color: var(--text-gray);
+		background: rgba(156, 163, 175, 0.1);
+	}
+
 	.event-title {
 		color: white;
 		font-weight: 600;
@@ -94,14 +153,16 @@
 		color: var(--text-gray);
 		font-size: 0.8rem;
 	}
-	.empty-line {
-		flex: 1;
-		margin-left: 2rem;
-		height: 1px;
-		background: var(--border-color);
-		border-bottom: 1px dashed var(--border-color);
-		margin-top: 0.5rem;
-	}
+    .empty-state {
+        text-align: center;
+        color: var(--text-gray);
+        padding: 4rem 0;
+    }
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        display: block;
+    }
 	.fade-in {
 		animation: fadeIn 0.4s ease-out forwards;
 	}

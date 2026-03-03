@@ -30,6 +30,7 @@
 
     let notificationMessage = $state('');
     let notificationKey = $state(0);
+    let selectedTask = $state(null); // For detail view
 
     // --- 1. FETCH TASKS (READ) ---
     async function fetchTasks() {
@@ -295,6 +296,37 @@
         }
     }
 
+    function formatDeadline(deadlineString) {
+        if (!deadlineString) return { text: 'No deadline', class: 'neutral' };
+
+        const deadlineDate = new Date(deadlineString);
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+        const deadlineDay = new Date(deadlineDate.getFullYear(), deadlineDate.getMonth(), deadlineDate.getDate());
+
+        const timeString = deadlineDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+
+        // Overdue
+        if (deadlineDate < now) {
+            return { text: `Overdue! (${timeString})`, class: 'overdue' };
+        }
+        // Today
+        if (deadlineDay.getTime() === today.getTime()) {
+            const diffMinutes = Math.round((deadlineDate.getTime() - now.getTime()) / (1000 * 60));
+            if (diffMinutes <= 60) {
+                return { text: `Due in ${diffMinutes} min! (${timeString})`, class: 'due-soon' };
+            }
+            return { text: `Due today at ${timeString}`, class: 'due-today' };
+        }
+        // Tomorrow
+        if (deadlineDay.getTime() === tomorrow.getTime()) {
+            return { text: `Due tomorrow at ${timeString}`, class: 'due-tomorrow' };
+        }
+        // Future date
+        return { text: `Due on ${deadlineDate.toLocaleDateString()} at ${timeString}`, class: 'due-future' };
+    }
+
     onMount(fetchTasks);
 </script>
 
@@ -316,7 +348,7 @@
         <div class="kanban-col">
             <div class="col-header">To Do <span class="badge">{todo.length}</span></div>
             {#each todo as task (task.id)}
-                <div class="task-card">
+                <div class="task-card" on:click={() => selectedTask = task}>
                     <div class="card-header-actions">
                         <div class="tag-row">
                             <span class="tag {task.priority.toLowerCase()}">{task.category}</span>
@@ -354,7 +386,7 @@
         <div class="kanban-col">
             <div class="col-header">In Progress <span class="badge">{inProgress.length}</span></div>
             {#each inProgress as task (task.id)}
-                <div class="task-card">
+                <div class="task-card" on:click={() => selectedTask = task}>
                     <div class="card-header-actions">
                         <div class="tag-row">
                             <span class="tag green">{task.category}</span>
@@ -386,7 +418,7 @@
         <div class="kanban-col">
             <div class="col-header">Completed <span class="badge">{completed.length}</span></div>
             {#each completed as task (task.id)}
-                <div class="task-card completed">
+                <div class="task-card completed" on:click={() => selectedTask = task}>
                     <div class="card-header-actions">
                         <h4>{task.name}</h4>
                         <div class="task-actions">
@@ -410,6 +442,31 @@
         </div>
     </div>
 </div>
+
+{#if selectedTask}
+    <div class="popup-backdrop" on:click={() => selectedTask = null}>
+        <div class="popup" on:click|stopPropagation>
+            <div class="popup-header">
+                <h3>{selectedTask.name}</h3>
+                <button class="close-btn" on:click={() => selectedTask = null}><i class="bx bx-x"></i></button>
+            </div>
+            <div class="task-detail-content">
+                <p><strong>Category:</strong> <span class="tag {selectedTask.category.toLowerCase()}">{selectedTask.category}</span></p>
+                <p><strong>Priority:</strong> <span class="tag-priority {selectedTask.priority.toLowerCase()}">{selectedTask.priority.replace('_', ' ')}</span></p>
+                {#if selectedTask.deadline}
+                    <p><strong>Deadline:</strong> <span class="deadline-status {formatDeadline(selectedTask.deadline).class}">{formatDeadline(selectedTask.deadline).text}</span></p>
+                {/if}
+                <p><strong>Status:</strong> {selectedTask.status.replace('_', ' ')}</p>
+                {#if selectedTask.status === 'in_progress'}
+                    <p><strong>Progress:</strong> {selectedTask.progress}%</p>
+                {/if}
+                {#if selectedTask.status === 'completed' && selectedTask.completionTime}
+                    <p><strong>Completed On:</strong> {new Date(selectedTask.completionTime).toLocaleString()}</p>
+                {/if}
+            </div>
+        </div>
+    </div>
+{/if}
 
 {#if notificationMessage}
     {#key notificationKey}
@@ -663,4 +720,31 @@
         width: 100%;
         margin-top: 0.5rem;
     }
+
+    .task-detail-content {
+        padding: 1rem;
+        text-align: left;
+    }
+    .task-detail-content p {
+        color: var(--text-gray);
+        margin: 0.5rem 0;
+        font-size: 0.9rem;
+    }
+    .task-detail-content p strong {
+        color: white;
+        font-weight: 600;
+        margin-right: 0.5rem;
+    }
+
+    .deadline-status {
+        font-weight: 600;
+        padding: 0.2em 0.5em;
+        border-radius: 0.25em;
+    }
+    .deadline-status.overdue { background-color: #ef4444; color: white; }
+    .deadline-status.due-soon { background-color: #fbbf24; color: #1e1f2e; }
+    .deadline-status.due-today { background-color: #4ade80; color: #1e1f2e; }
+    .deadline-status.due-tomorrow { background-color: #60a5fa; color: white; }
+    .deadline-status.due-future { background-color: #94a3b8; color: white; }
+    .deadline-status.neutral { background-color: #4b5563; color: white; }
 </style>
