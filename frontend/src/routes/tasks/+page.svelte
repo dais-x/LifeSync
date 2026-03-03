@@ -6,17 +6,21 @@
     const SEND_URL = 'https://fahim-n8n.laddu.cc/webhook/sync-task';
     const GET_URL = 'https://fahim-n8n.laddu.cc/webhook/get-tasks';
     const MANAGE_URL = 'https://fahim-n8n.laddu.cc/webhook/manage-task';
-    const CURRENT_USER_ID = "user_456"; 
+    const CURRENT_USER_ID = "user_456";
 
     let showAddTaskPopup = $state(false);
     
+    // --- EDIT MODE STATE ---
+    let isEditing = $state(false);
+    let editingTaskId = $state(null);
+
     // State for the new task form
     let newTaskName = $state('');
     let newTaskDeadline = $state('');
     let newTaskTime = $state('23:59');
     let newTaskPriority = $state('mid');
     let repeatOption = $state('never');
-    let customDays = $state([]); 
+    let customDays = $state([]);
     const daysOfWeek = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
     let categories = $state(['Study', 'Work', 'Home', 'Fitness', 'Groceries']);
@@ -39,7 +43,7 @@
             if (res.ok) {
                 const incoming = await res.json();
                 let allTasks = [];
-                
+
                 // N8N Data Unwrap
                 if (incoming.data && Array.isArray(incoming.data)) {
                     allTasks = incoming.data.filter(t => t.isDeleted !== true);
@@ -53,9 +57,9 @@
                 allTasks.forEach(task => {
                     // Normalize ID (MongoDB uses _id)
                     const safeId = task._id ? task._id : task.id;
-                    
+
                     const uiTask = {
-                        id: safeId, 
+                        id: safeId,
                         name: task.title || "Untitled",
                         category: task.category || "General",
                         priority: task.priority || "mid",
@@ -65,7 +69,8 @@
                         attachments: 0,
                         progress: task.progress || 0,
                         completionTime: task.completionTime || null,
-                        customDays: task.customDays || []
+                        customDays: task.customDays || [],
+                        repeat: task.repeat || 'never'
                     };
 
                     if (uiTask.status === 'completed') {
@@ -76,7 +81,7 @@
                         todo.push(uiTask);
                     }
                 });
-                
+
                 // Trigger Reactivity
                 todo = [...todo]; inProgress = [...inProgress]; completed = [...completed];
                 sortTodo();
@@ -86,41 +91,52 @@
         }
     }
 
-    // --- 2. ADD NEW TASK (WRITE) ---
+    // --- 2. HANDLE FORM SUBMIT (ADD OR EDIT) ---
+    async function handleFormSubmit() {
+        if (isEditing) {
+            await saveEditedTask();
+        } else {
+            await handleAddTask();
+        }
+    }
+
+    // --- ADD NEW TASK LOGIC ---
     async function handleAddTask() {
         if (newTaskName.trim() === '' || selectedCategory.trim() === '') return;
-        
+
         const combinedDeadline = newTaskDeadline ? `${newTaskDeadline} ${newTaskTime}` : '';
-        
+
         // Payload matches your MongoDB fields
         const payload = {
             user_id: CURRENT_USER_ID,
             title: newTaskName,
-            status: "pending", 
-            priority: newTaskPriority, 
-            category: selectedCategory, 
+            status: "pending",
+            priority: newTaskPriority,
+            category: selectedCategory,
             deadline: combinedDeadline,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            repeat: repeatOption,
+            customDays: customDays
         };
 
         // Optimistic UI Update
         const newId = "temp-" + Date.now();
-        const newTaskItem = { 
-            id: newId, 
-            name: newTaskName, 
-            category: selectedCategory, 
+        const newTaskItem = {
+            id: newId,
+            name: newTaskName,
+            category: selectedCategory,
             priority: newTaskPriority,
-            deadline: combinedDeadline, 
-            status: "pending", 
-            user: "ME", 
+            deadline: combinedDeadline,
+            status: "pending",
+            user: "ME",
             attachments: 0,
             repeat: repeatOption,
             customDays: [...customDays]
         };
-        
-        todo = [newTaskItem, ...todo]; 
+
+        todo = [newTaskItem, ...todo];
         sortTodo();
-        
+
         notificationMessage = `Added "${newTaskItem.name}" to To Do list!`;
         notificationKey++;
         togglePopup();
@@ -139,6 +155,65 @@
         }
     }
 
+    // --- EDIT TASK LOGIC ---
+    function openEditPopup(task) {
+        isEditing = true;
+        editingTaskId = task.id;
+        
+        // Populate Form
+        newTaskName = task.name;
+        selectedCategory = task.category;
+        newTaskPriority = task.priority;
+        repeatOption = task.repeat || 'never';
+        customDays = task.customDays || [];
+        
+        if (task.deadline) {
+            const parts = task.deadline.split(' ');
+            newTaskDeadline = parts[0];
+            newTaskTime = parts[1] || '23:59';
+        } else {
+            newTaskDeadline = '';
+            newTaskTime = '23:59';
+        }
+
+        showAddTaskPopup = true;
+        activeMenu = null; // Close dropdown menu
+    }
+
+    async function saveEditedTask() {
+        const combinedDeadline = newTaskDeadline ? `${newTaskDeadline} ${newTaskTime}` : '';
+        
+        const updates = {
+            title: newTaskName,
+            priority: newTaskPriority,
+            category: selectedCategory,
+            deadline: combinedDeadline,
+            repeat: repeatOption,
+            customDays: customDays
+        };
+
+        // Update Local State
+        const updateLocal = (t) => {
+            if (t.id === editingTaskId) {
+                return { ...t, name: updates.title, ...updates };
+            }
+            return t;
+        };
+        
+        todo = todo.map(updateLocal);
+        inProgress = inProgress.map(updateLocal);
+        completed = completed.map(updateLocal);
+        
+        sortTodo();
+        
+        // API Call
+        apiManageTask('update', { id: editingTaskId }, updates);
+        
+        notificationMessage = `Task updated!`;
+        notificationKey++;
+        togglePopup();
+    }
+
     // --- 3. MANAGE TASKS (UPDATE / DELETE) ---
     async function apiManageTask(action, task, updateFields = {}) {
         if (String(task.id).startsWith('temp-')) return; // Don't sync temp tasks
@@ -148,9 +223,9 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    action: action,      
-                    id: task.id,         
-                    updateFields: updateFields 
+                    action: action,
+                    id: task.id,
+                    updateFields: updateFields
                 })
             });
         } catch (e) {
@@ -158,41 +233,44 @@
         }
     }
 
-    // --- MOVEMENT & LOGIC (Matches your original logic + API calls) ---
+    // --- MOVEMENT & LOGIC ---
 
     function sortTodo() {
         const priorityOrder = { 'past_deadline': 4, 'high': 3, 'mid': 2, 'low': 1 };
-        
+
         const isPastDue = (task) => {
             if (!task.deadline) return false;
             const today = new Date();
-            today.setHours(0, 0, 0, 0); 
+            today.setHours(0, 0, 0, 0);
             const deadlineDate = new Date(task.deadline);
             return deadlineDate < today;
         };
-        
-        // Helper to safely lowercase priority
+
         const getPrio = (p) => (p || 'mid').toLowerCase();
 
         todo.sort((a, b) => {
             const aPriority = isPastDue(a) ? 'past_deadline' : getPrio(a.priority);
             const bPriority = isPastDue(b) ? 'past_deadline' : getPrio(b.priority);
-            
+
             const aValue = priorityOrder[aPriority] || 0;
             const bValue = priorityOrder[bPriority] || 0;
 
-            return bValue - aValue; 
+            return bValue - aValue;
         });
-        
-        todo = [...todo]; 
+
+        todo = [...todo];
     }
 
     function togglePopup() {
         showAddTaskPopup = !showAddTaskPopup;
         if (!showAddTaskPopup) {
+            // Reset form
             newTaskName = ''; newTaskDeadline = ''; newTaskTime = '23:59';
             newTaskPriority = 'mid'; repeatOption = 'never'; customDays = [];
             selectedCategory = categories[0] || ''; newCategoryInput = '';
+            // Reset Edit Mode
+            isEditing = false;
+            editingTaskId = null;
         }
     }
 
@@ -222,7 +300,6 @@
             moveToCompleted(task);
         } else {
             inProgress = [...inProgress];
-            // API Update
             apiManageTask('update', task, { progress: task.progress });
         }
     }
@@ -233,39 +310,33 @@
         completed = [taskToMove, ...completed];
         todo = todo.filter(t => t.id !== task.id);
         inProgress = inProgress.filter(t => t.id !== task.id);
-        
+
         notificationMessage = `Congrats on finishing "${task.name}"!`;
         notificationKey++;
         activeMenu = null;
-        
-        // API Update
+
         apiManageTask('update', task, { status: 'completed', completionTime: new Date().toISOString() });
     }
 
     function moveToInProgress(task) {
-        // Your logic: reset progress to 0 when moving to In Progress
         inProgress = [{ ...task, progress: 0, status: 'in_progress' }, ...inProgress];
         todo = todo.filter(t => t.id !== task.id);
         activeMenu = null;
-        
-        // API Update
+
         apiManageTask('update', task, { status: 'in_progress', progress: 0 });
     }
 
     function pushBackToProgress(task) {
-        // Your logic: set progress to 75 when pushing back
         const taskToMove = { ...task, progress: 75, status: 'in_progress' };
         delete taskToMove.completionTime;
         inProgress = [taskToMove, ...inProgress];
         completed = completed.filter(t => t.id !== task.id);
         activeMenu = null;
-        
-        // API Update
+
         apiManageTask('update', task, { status: 'in_progress', progress: 75 });
     }
 
     function deleteTask(taskId) {
-        // Find the task object first to send to API
         const task = todo.find(t => t.id === taskId) || inProgress.find(t => t.id === taskId) || completed.find(t => t.id === taskId);
 
         todo = todo.filter(t => t.id !== taskId);
@@ -307,11 +378,9 @@
 
         const timeString = deadlineDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
 
-        // Overdue
         if (deadlineDate < now) {
             return { text: `Overdue! (${timeString})`, class: 'overdue' };
         }
-        // Today
         if (deadlineDay.getTime() === today.getTime()) {
             const diffMinutes = Math.round((deadlineDate.getTime() - now.getTime()) / (1000 * 60));
             if (diffMinutes <= 60) {
@@ -319,11 +388,9 @@
             }
             return { text: `Due today at ${timeString}`, class: 'due-today' };
         }
-        // Tomorrow
         if (deadlineDay.getTime() === tomorrow.getTime()) {
             return { text: `Due tomorrow at ${timeString}`, class: 'due-tomorrow' };
         }
-        // Future date
         return { text: `Due on ${deadlineDate.toLocaleDateString()} at ${timeString}`, class: 'due-future' };
     }
 
@@ -363,6 +430,8 @@
                             </button>
                             {#if activeMenu === task.id}
                                 <div class="actions-menu">
+                                    <button on:click={(e) => { e.stopPropagation(); openEditPopup(task); }}><i class='bx bx-edit'></i> Edit Task</button>
+                                    
                                     <button on:click={(e) => { e.stopPropagation(); moveToInProgress(task); }}><i class='bx bx-loader-alt'></i> Push to Progress</button>
                                     <button on:click={(e) => { e.stopPropagation(); moveToCompleted(task); }}><i class='bx bx-check-double'></i> Mark as Completed</button>
                                     <div class="divider"></div>
@@ -401,6 +470,8 @@
                             </button>
                             {#if activeMenu === task.id}
                                 <div class="actions-menu">
+                                    <button on:click={(e) => { e.stopPropagation(); openEditPopup(task); }}><i class='bx bx-edit'></i> Edit Task</button>
+                                    
                                     <button on:click={(e) => { e.stopPropagation(); moveToCompleted(task); }}><i class='bx bx-check-double'></i> Mark as Completed</button>
                                     <div class="divider"></div>
                                     <button on:click={(e) => { e.stopPropagation(); deleteInProgressTask(task.id); }} class="delete"><i class='bx bx-trash'></i> Delete Task</button>
@@ -427,6 +498,8 @@
                             </button>
                             {#if activeMenu === task.id}
                                 <div class="actions-menu">
+                                    <button on:click={(e) => { e.stopPropagation(); openEditPopup(task); }}><i class='bx bx-edit'></i> Edit Task</button>
+
                                     <button on:click={(e) => { e.stopPropagation(); pushBackToProgress(task); }}><i class='bx bx-loader-alt'></i> Push to Progress</button>
                                     <div class="divider"></div>
                                     <button on:click={(e) => { e.stopPropagation(); deleteCompletedTask(task.id); }} class="delete"><i class='bx bx-trash'></i> Delete Task</button>
@@ -478,10 +551,10 @@
     <div class="popup-backdrop" on:click={togglePopup}>
         <div class="popup" on:click|stopPropagation>
             <div class="popup-header">
-                <h3>Add New Task</h3>
+                <h3>{isEditing ? 'Edit Task' : 'Add New Task'}</h3>
                 <button class="close-btn" on:click={togglePopup}><i class="bx bx-x"></i></button>
             </div>
-            <form on:submit|preventDefault={handleAddTask} class="task-form">
+            <form on:submit|preventDefault={handleFormSubmit} class="task-form">
                 <div class="form-row">
                     <div class="form-group" style="flex: 2;">
                         <label for="task-name">Task Name</label>
@@ -536,7 +609,7 @@
                 {:else}
                     <div style="margin-top: -0.5rem"></div>
                 {/if}
-                
+
                 <div class="form-group">
                     <label>Task Category</label>
                     <div class="category-list">
@@ -558,7 +631,7 @@
                     </div>
                 </div>
 
-                <button type="submit" class="save-btn">Add Task to "To Do"</button>
+                <button type="submit" class="save-btn">{isEditing ? 'Save Changes' : 'Add Task to "To Do"'}</button>
             </form>
         </div>
     </div>
@@ -630,7 +703,6 @@
     .save-btn { background: var(--accent-purple); color: white; border: none; padding: 0.75rem; border-radius: 0.5rem; cursor: pointer; font-size: 0.9rem; font-weight: 500; margin-top: 0.5rem; }
     .fade-in { animation: fadeIn 0.4s ease-out forwards; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
     .card-header-actions {
         display: flex;
@@ -691,7 +763,7 @@
         background: var(--accent-purple);
         color: white;
     }
-    
+
     .actions-menu button i {
         font-size: 1.1rem;
     }
