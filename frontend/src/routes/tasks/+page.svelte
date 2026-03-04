@@ -291,10 +291,13 @@
                                     </div>
                                 </div>
                                 <h4>{task.name}</h4>
-                                <input type="range" min="0" max="100" value={task.progress} 
-                                    oninput={(e) => handleProgressChange(task, e)} 
-                                    onclick={(e) => e.stopPropagation()}
-                                    class="progress-slider" style="accent-color: {getCatColor(task.category)}" />
+                                <div class="progress-section">
+                                    <input type="range" min="0" max="100" value={task.progress} 
+                                        oninput={(e) => handleProgressChange(task, e)} 
+                                        onclick={(e) => e.stopPropagation()}
+                                        class="progress-slider" style="accent-color: {getCatColor(task.category)}" />
+                                    <span class="progress-val">{task.progress}%</span>
+                                </div>
                             </div>
                         {/each}
                     </div>
@@ -445,7 +448,9 @@
     .actions-menu button:hover { background: var(--accent-purple); color: white; }
     .actions-menu .delete { color: #f87171; }
 
-    .progress-slider { width: 100%; margin-top: 1rem; height: 6px; border-radius: 3px; }
+    .progress-slider { flex: 1; height: 6px; border-radius: 3px; }
+    .progress-section { display: flex; align-items: center; gap: 10px; margin-top: 1rem; }
+    .progress-val { font-size: 0.75rem; color: var(--text-gray); font-weight: 700; min-width: 35px; text-align: right; }
 
     /* --- POPUPS --- */
     .popup-backdrop { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 100; backdrop-filter: blur(5px); }
