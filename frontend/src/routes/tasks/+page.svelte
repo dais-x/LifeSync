@@ -662,17 +662,20 @@
     .progress-text { font-size: 0.7rem; color: var(--text-gray); margin-top: 0.25rem; }
     
     .popup-backdrop { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; z-index: 100; }
-    .popup { background: var(--card-bg); border-radius: 1rem; padding: 1.25rem; width: 95%; max-width: 650px; border: 1px solid var(--border-color); }
+    .popup { background: var(--card-bg); border-radius: 1rem; padding: 1.25rem; width: 95%; max-width: 650px; border: 1px solid var(--border-color); max-height: 90vh; overflow-y: auto; }
     .popup-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
     .popup-header h3 { margin: 0; color: white; font-size: 1.1rem; }
     .close-btn { background: none; border: none; color: var(--text-gray); font-size: 1.25rem; cursor: pointer; }
     
     .task-form { display: flex; flex-direction: column; gap: 1rem; }
     .form-row { display: flex; gap: 1rem; width: 100%; }
+    @media (max-width: 600px) {
+        .form-row { flex-direction: column; }
+    }
     .form-row .form-group { flex: 1; }
     .form-group { display: flex; flex-direction: column; gap: 0.3rem; }
     .form-group label { color: var(--text-gray); font-size: 0.8rem; }
-    .form-group input, .form-group select { background: #1E1F2E; border: 1px solid var(--border-color); color: white; padding: 0.6rem; border-radius: 0.5rem; font-size: 0.85rem; }
+    .form-group input, .form-group select { background: #1E1F2E; border: 1px solid var(--border-color); color: white; padding: 0.6rem; border-radius: 0.5rem; font-size: 16px; }
     
     .category-list { display: flex; flex-direction: column; gap: 0.4rem; max-height: 120px; overflow-y: auto; padding-right: 0.5rem; margin-bottom: 0.4rem; }
     .category-item { display: flex; align-items: center; justify-content: space-between; }
