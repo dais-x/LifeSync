@@ -5,6 +5,7 @@
 
     // --- API CONFIGURATION ---
     const GET_URL = 'https://fahim-n8n.laddu.cc/webhook/get-tasks';
+    const MANAGE_URL = 'https://fahim-n8n.laddu.cc/webhook/manage-task';
     const POLL_INTERVAL = 10000;
 
     // --- STATE VARIABLES ---
@@ -22,7 +23,7 @@
     // Modal States
     let showNotifModal = $state(false);
     let showHabitModal = $state(false);
-    let selectedNotifId = $state(null); // Track only ID for easier toggling
+    let selectedNotifId = $state(null);
 
     // Donut Chart State
     let categoryStats = $state([]);
@@ -43,13 +44,51 @@
                 }
                 allTasks = tasks;
 
-                processStats(tasks);
-                processWidgets(tasks);
-                processNotifications(tasks);
-                processDonut(tasks);
+                updateAllProcessors();
             }
         } catch (e) {
             console.error("Sync failed:", e);
+        }
+    }
+
+    function updateAllProcessors() {
+        processStats(allTasks);
+        processWidgets(allTasks);
+        processNotifications(allTasks);
+        processDonut(allTasks);
+    }
+
+    // --- TASK ACTIONS ---
+    async function completeTask(task) {
+        const taskId = task.id || task._id;
+        
+        // 1. Optimistic UI Update
+        allTasks = allTasks.map(t => {
+            const tId = t.id || t._id;
+            if (tId === taskId) {
+                return { ...t, status: 'completed', completionTime: new Date().toISOString() };
+            }
+            return t;
+        });
+        updateAllProcessors();
+
+        // 2. API Call
+        try {
+            await fetch(MANAGE_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'update',
+                    id: taskId,
+                    updateFields: { 
+                        status: 'completed', 
+                        completionTime: new Date().toISOString() 
+                    }
+                })
+            });
+        } catch (e) {
+            console.error("Failed to complete task:", e);
+            // Optional: Revert on failure
         }
     }
 
@@ -63,12 +102,15 @@
 
     function processWidgets(tasks) {
         const active = tasks.filter(t => t.status !== 'completed');
+        
+        // Sorted by TIME (Deadline first, then creation time)
         priorityTasks = active
             .sort((a, b) => {
-                const pMap = { high: 3, mid: 2, low: 1 };
-                return (pMap[b.priority] || 0) - (pMap[a.priority] || 0);
+                const timeA = a.deadline ? new Date(a.deadline) : new Date(a.timestamp || 0);
+                const timeB = b.deadline ? new Date(b.deadline) : new Date(b.timestamp || 0);
+                return timeA - timeB;
             })
-            .slice(0, 5);
+            .slice(0, 8); // Showing a bit more since it's dynamic now
 
         upcomingDeadlines = active
             .filter(t => t.deadline)
@@ -216,13 +258,20 @@
             </div>
             <div class="task-list">
                 {#if priorityTasks.length === 0}
-                    <div style="padding:1rem; color:#9ca3af; text-align:center; font-style:italic;">No active tasks</div>
+                    <div style="padding:2rem; color:#9ca3af; text-align:center; font-style:italic;">All caught up!</div>
                 {/if}
-                {#each priorityTasks as task}
-                    <div class="task-item">
-                        <div class="circle"></div>
+                {#each priorityTasks as task (task.id || task._id)}
+                    <div class="task-item" transition:slide|local>
+                        <button class="complete-btn" on:click={() => completeTask(task)} title="Mark as complete">
+                            <div class="circle"></div>
+                        </button>
                         <span class="task-text">{task.title}</span>
-                        <span class="tag {task.priority ? task.priority.toLowerCase() : 'mid'}">{task.category || 'General'}</span>
+                        <div class="task-meta-info">
+                            {#if task.deadline}
+                                <span class="time-tag"><i class="bx bx-time-five"></i> {new Date(task.deadline).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                            {/if}
+                            <span class="tag {task.priority ? task.priority.toLowerCase() : 'mid'}">{task.category || 'General'}</span>
+                        </div>
                     </div>
                 {/each}
             </div>
@@ -452,7 +501,7 @@
     .send-btn { position: absolute; right: 0.5rem; top: 0.5rem; background-color: var(--accent-purple); border: none; color: white; padding: 0.35rem 0.5rem; border-radius: 0.5rem; cursor: pointer; }
 
     /* --- WIDGETS --- */
-    .widget-grid { display: grid; grid-template-columns: 1fr; gap: 1.5rem; }
+    .widget-grid { display: grid; grid-template-columns: 1fr; gap: 1.5rem; align-items: start; }
     .widget { background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1.25rem; display: flex; flex-direction: column; text-align: left; transition: transform 0.2s, border-color 0.2s; }
     .widget.clickable { cursor: pointer; }
     .widget.clickable:hover { border-color: var(--accent-purple); transform: translateY(-2px); }
@@ -465,11 +514,22 @@
     .notif-title { color: var(--text-white); font-size: 0.85rem; font-weight: 500; margin: 0; }
     .notif-time { color: var(--text-gray); font-size: 0.7rem; margin: 0.2rem 0 0 0; }
 
-    .tasks-widget { min-height: 400px; }
-    .task-item { display: flex; align-items: center; padding: 0.75rem; border-radius: 0.5rem; margin-bottom: 0.25rem; }
+    /* TASKS WIDGET (DYNAMIC SIZE) */
+    .tasks-widget { min-height: auto; } /* Removed fixed 400px */
+    .task-item { 
+        display: flex; align-items: center; padding: 0.875rem; border-radius: 0.5rem; margin-bottom: 0.5rem;
+        background: rgba(255,255,255,0.02); border: 1px solid transparent; transition: all 0.2s;
+    }
+    .task-item:hover { background: rgba(255,255,255,0.05); border-color: var(--border-color); }
     .task-text { flex: 1; font-size: 0.875rem; color: #d1d5db; margin: 0 0.75rem; }
-    .circle { width: 1.25rem; height: 1.25rem; border: 2px solid #4b5563; border-radius: 50%; }
-    .tag { font-size: 0.625rem; padding: 0.1rem 0.5rem; border-radius: 0.25rem; }
+    
+    .complete-btn { background: none; border: none; padding: 0; cursor: pointer; display: flex; align-items: center; }
+    .circle { width: 1.25rem; height: 1.25rem; border: 2px solid #4b5563; border-radius: 50%; transition: all 0.2s; }
+    .complete-btn:hover .circle { border-color: var(--accent-green); background: rgba(34, 197, 94, 0.1); }
+    
+    .task-meta-info { display: flex; align-items: center; gap: 0.75rem; }
+    .time-tag { font-size: 0.7rem; color: var(--text-gray); display: flex; align-items: center; gap: 0.25rem; }
+    .tag { font-size: 0.625rem; padding: 0.15rem 0.5rem; border-radius: 0.25rem; text-transform: capitalize; }
     .tag.high { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
     .tag.mid { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
     .tag.low { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
