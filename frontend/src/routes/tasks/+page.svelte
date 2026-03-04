@@ -39,6 +39,13 @@
     let newCategoryColor = $state('#6366f1');
     const presetColors = ['#6366f1', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#8b5cf6', '#06b6d4'];
 
+    function randomizeNewCategoryColor() {
+        const letters = '0123456789ABCDEF';
+        let color = '#';
+        for (let i = 0; i < 6; i++) { color += letters[Math.floor(Math.random() * 16)]; }
+        newCategoryColor = color;
+    }
+
     // Data
     let todo = $state([]);
     let inProgress = $state([]);
@@ -116,7 +123,7 @@
         const payload = {
             user_id: CURRENT_USER_ID, title: newTaskName, status: "pending", 
             priority: newTaskPriority, category: selectedCategory, deadline: combinedDeadline,
-            timestamp: new Date().toISOString(), color: catObj?.color || '#6366f1'
+            timestamp: new Date().toISOString(), color: catObj?.color || newCategoryColor
         };
         try {
             await fetch(SEND_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -148,13 +155,6 @@
             selectedCategory = newCategoryInput.trim();
             newCategoryInput = '';
         }
-    }
-
-    function randomizeNewCategoryColor() {
-        const letters = '0123456789ABCDEF';
-        let color = '#';
-        for (let i = 0; i < 6; i++) { color += letters[Math.floor(Math.random() * 16)]; }
-        newCategoryColor = color;
     }
 
     function handleDeleteCategory(categoryName) {
@@ -352,12 +352,41 @@
                     </div>
                 </div>
                 <div class="form-group">
-                    <label>Category Color</label>
-                    <div class="color-grid">
+                    <label>
+                        Task Color
+                        <span class="color-preview" style="background: {newCategoryColor}"></span>
+                    </label>
+                    <div class="color-selection-row">
                         {#each presetColors as color}
-                            <button type="button" class="color-circle" class:selected={newCategoryColor === color} style="background: {color}" onclick={() => newCategoryColor = color}></button>
+                            <button
+                                type="button"
+                                class="color-dot"
+                                class:selected={newCategoryColor === color}
+                                style="background: {color}"
+                                onclick={() => newCategoryColor = color}>
+                            </button>
                         {/each}
-                        <button type="button" class="shuffle-btn" onclick={randomizeNewCategoryColor}><i class="bx bx-shuffle"></i></button>
+                        <div
+                            class="custom-color-picker-btn"
+                            style="background: {presetColors.includes(newCategoryColor) ? 'rgba(255,255,255,0.05)' : newCategoryColor}"
+                        >
+                            <input
+                                type="color"
+                                bind:value={newCategoryColor}
+                                id="customColor"
+                            >
+                            <label for="customColor">
+                                <i class="bx {presetColors.includes(newCategoryColor) ? 'bx-plus' : 'bx-edit-alt'}" style="color: {presetColors.includes(newCategoryColor) ? 'inherit' : 'white'}"></i>
+                            </label>
+                        </div>
+                        <button
+                            type="button"
+                            class="shuffle-btn"
+                            onclick={randomizeNewCategoryColor}
+                            title="Random Color"
+                        >
+                            <i class="bx bx-shuffle"></i>
+                        </button>
                     </div>
                 </div>
                 <div class="form-group">
@@ -437,9 +466,9 @@
     .card-header-actions { display: flex; justify-content: space-between; align-items: flex-start; }
     .tag { font-size: 0.65rem; padding: 0.2rem 0.5rem; border-radius: 0.3rem; background: rgba(255,255,255,0.05); color: white; border-left: 3px solid; }
     .tag-priority { font-size: 0.6rem; text-transform: uppercase; font-weight: 800; color: #fff; margin-left: 5px; }
-    .tag-priority.high { color: #f87171; }
-    .tag-priority.mid { color: #fb923c; }
-    .tag-priority.low { color: #4ade80; }
+    .tag-priority.high { background: #f87171; }
+    .tag-priority.mid { background: #fb923c; }
+    .tag-priority.low { background: #4ade80; }
 
     .task-actions { position: relative; }
     .options-btn { background: none; border: none; color: var(--text-gray); font-size: 1.25rem; cursor: pointer; }
@@ -463,6 +492,17 @@
     .form-group label { color: var(--text-gray); font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
     .form-group input, .form-group select { background: #1e1f2e; border: 1px solid var(--border-color); color: white; padding: 0.75rem; border-radius: 0.5rem; font-size: 16px; width: 100%; outline: none; }
     
+    /* CATEGORY COLOR PICKER STYLES (REQUIRED CHANGES ONLY) */
+    .color-selection-row { display: flex; gap: 8px; align-items: center; margin-top: 5px; }
+    .color-dot { width: 26px; height: 26px; border-radius: 50%; border: none; cursor: pointer; transition: 0.2s; }
+    .color-dot.selected { outline: 2px solid white; outline-offset: 2px; }
+    .color-preview { display: inline-block; width: 14px; height: 14px; border-radius: 50%; margin-left: 8px; border: 1px solid rgba(255,255,255,0.2); }
+    .custom-color-picker-btn { width: 28px; height: 28px; border-radius: 50%; position: relative; display: flex; justify-content: center; align-items: center; border: 1px solid var(--border-color); }
+    .custom-color-picker-btn input { position: absolute; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+    .custom-color-picker-btn i { color: white; font-size: 1rem; }
+    .shuffle-btn { border: none; background: transparent; cursor: pointer; font-size: 1.25rem; color: var(--text-gray); transition: 0.2s; }
+    .shuffle-btn:hover { color: white; }
+
     .category-list { display: flex; flex-direction: column; gap: 0.5rem; max-height: 150px; overflow-y: auto; margin-bottom: 0.5rem; }
     .category-item { display: flex; align-items: center; justify-content: space-between; background: #1e1f2e; padding: 0.5rem 0.75rem; border-radius: 0.5rem; border: 1px solid var(--border-color); }
     .category-item label { display: flex; align-items: center; gap: 10px; flex: 1; cursor: pointer; color: white; font-size: 0.85rem; }
@@ -473,10 +513,6 @@
     .add-category-v2 { background: rgba(255,255,255,0.03); padding: 0.75rem; border-radius: 0.5rem; margin-top: 0.5rem; display: flex; gap: 10px; }
     .add-category-v2 input { flex: 1; background: none; border: none; color: white; outline: none; font-size: 0.9rem; }
     .add-category-btn { background: var(--accent-green); color: white; border: none; border-radius: 0.5rem; padding: 0.5rem 1rem; cursor: pointer; }
-    .color-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 5px; }
-    .color-circle { width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; transition: 0.2s; }
-    .color-circle.selected { border-color: white; transform: scale(1.1); }
-    .shuffle-btn { background: none; border: none; color: var(--text-gray); font-size: 1.25rem; cursor: pointer; margin-left: auto; }
     .save-btn { width: 100%; background: var(--accent-purple); color: white; border: none; padding: 1rem; border-radius: 1rem; font-weight: 700; margin-top: 1rem; cursor: pointer; }
 
     /* Layout Toggle */
