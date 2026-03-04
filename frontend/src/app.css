@@ -11,6 +11,31 @@
 	outline: none !important;
 }
 
+/* Custom Scrollbar Styles */
+::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+::-webkit-scrollbar-track {
+	background: var(--bg-dark);
+}
+
+::-webkit-scrollbar-thumb {
+	background: #2a2b3d;
+	border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: #3f3f5f;
+}
+
+/* For Firefox */
+* {
+	scrollbar-width: thin;
+	scrollbar-color: #2a2b3d var(--bg-dark);
+}
+
 /* src/app.css */
 :root {
 	--bg-dark: #0b0c15;
