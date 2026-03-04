@@ -1,10 +1,11 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
+    import { slide } from 'svelte/transition';
     import Notification from '$lib/Notification.svelte';
 
     // --- API CONFIGURATION ---
     const GET_URL = 'https://fahim-n8n.laddu.cc/webhook/get-tasks';
-    const POLL_INTERVAL = 10000; // Check for emails every 10 seconds
+    const POLL_INTERVAL = 10000;
 
     // --- STATE VARIABLES ---
     let pollInterval;
@@ -16,8 +17,14 @@
     let priorityTasks = $state([]);
     let upcomingDeadlines = $state([]);
     let notifications = $state([]);
+    let allTasks = $state([]);
 
-    // Donut Chart State (New)
+    // Modal States
+    let showNotifModal = $state(false);
+    let showHabitModal = $state(false);
+    let selectedNotifId = $state(null); // Track only ID for easier toggling
+
+    // Donut Chart State
     let categoryStats = $state([]);
     let donutGradient = $state('conic-gradient(#2a2b3d 0% 100%)');
 
@@ -27,19 +34,19 @@
             const res = await fetch(GET_URL);
             if (res.ok) {
                 const incoming = await res.json();
-                let allTasks = [];
+                let tasks = [];
 
                 if (incoming.data && Array.isArray(incoming.data)) {
-                    allTasks = incoming.data.filter(t => t.isDeleted !== true);
+                    tasks = incoming.data.filter(t => t.isDeleted !== true);
                 } else if (Array.isArray(incoming)) {
-                    allTasks = incoming;
+                    tasks = incoming;
                 }
+                allTasks = tasks;
 
-                // Update UI sections
-                processStats(allTasks);
-                processWidgets(allTasks);
-                processNotifications(allTasks);
-                processDonut(allTasks); // <--- Added Donut Processing
+                processStats(tasks);
+                processWidgets(tasks);
+                processNotifications(tasks);
+                processDonut(tasks);
             }
         } catch (e) {
             console.error("Sync failed:", e);
@@ -56,8 +63,6 @@
 
     function processWidgets(tasks) {
         const active = tasks.filter(t => t.status !== 'completed');
-
-        // Priority Tasks (Top 5)
         priorityTasks = active
             .sort((a, b) => {
                 const pMap = { high: 3, mid: 2, low: 1 };
@@ -65,7 +70,6 @@
             })
             .slice(0, 5);
 
-        // Deadlines (Next 3)
         upcomingDeadlines = active
             .filter(t => t.deadline)
             .sort((a, b) => new Date(a.deadline) - new Date(b.deadline))
@@ -73,27 +77,19 @@
     }
 
     function processNotifications(tasks) {
-        // 1. FILTER: Only keep tasks that actually have a valid timestamp
         const now = new Date();
         const validTasks = tasks.filter(t => {
-            if (!t.timestamp) return false; // Ignore old tasks with no time
+            if (!t.timestamp) return false;
             const taskDate = new Date(t.timestamp);
-            if (isNaN(taskDate.getTime())) return false; // Ignore broken dates
-
-            // Only show items from the last 24 hours
+            if (isNaN(taskDate.getTime())) return false;
             const diffHours = (now - taskDate) / (1000 * 60 * 60);
             return diffHours < 24 && diffHours >= 0;
         });
 
-        // 2. SORT: Newest First (Chronological)
         validTasks.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
-        // 3. MAP: Create the notification UI objects (Top 5)
-        notifications = validTasks.slice(0, 5).map(t => {
-            // Check if task is from Email (Category 'Email' or 'Inbox')
+        notifications = validTasks.slice(0, 15).map(t => { 
             const isEmail = t.category?.toLowerCase() === 'email' || t.category?.toLowerCase() === 'inbox';
-
-            // Format time (e.g. "5m ago")
             const diffMins = Math.round((new Date() - new Date(t.timestamp)) / 60000);
             let timeStr = diffMins < 1 ? 'Just now' : `${diffMins}m ago`;
             if (diffMins > 60) timeStr = `${Math.round(diffMins/60)}h ago`;
@@ -103,24 +99,23 @@
                 title: isEmail ? `Task "${t.title}" added from email` : `New Task: ${t.title}`,
                 category: t.category || 'General',
                 time: timeStr,
-                isHighlight: isEmail // True if from email
+                isHighlight: isEmail,
+                priority: t.priority || 'mid',
+                status: t.status || 'pending',
+                fullDate: new Date(t.timestamp).toLocaleString()
             };
         });
     }
 
     function processDonut(tasks) {
-        // Count tasks per category
         const catCounts = {};
         let statTotal = 0;
-        
-        // Include all tasks (active + completed) for the breakdown
         tasks.forEach(t => {
             const c = t.category || 'Other';
             catCounts[c] = (catCounts[c] || 0) + 1;
             statTotal++;
         });
 
-        // Calculate Percentages
         const colors = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
         categoryStats = Object.keys(catCounts).map((key, i) => ({
             label: key,
@@ -129,7 +124,6 @@
             color: colors[i % colors.length]
         }));
 
-        // Build Gradient String for CSS
         if (categoryStats.length > 0) {
             let currentPct = 0;
             const gradientParts = categoryStats.map(stat => {
@@ -144,13 +138,13 @@
         }
     }
 
+    function toggleNotif(id) {
+        selectedNotifId = selectedNotifId === id ? null : id;
+    }
+
     onMount(async () => {
         showWelcomeNotification = true;
-
-        // 1. Initial Load
         refreshDashboard();
-
-        // 2. Start Auto-Refresh (Polling)
         pollInterval = setInterval(refreshDashboard, POLL_INTERVAL);
     });
 
@@ -166,7 +160,7 @@
 <header class="top-header">
     <div class="header-left">
         <h2>Dashboard</h2>
-        </div>
+    </div>
     <div class="header-right">
         <div class="search-bar">
             <i class="bx bx-search"></i>
@@ -235,7 +229,7 @@
         </div>
 
         <div class="side-widgets">
-            <div class="widget notification-widget">
+            <button class="widget notification-widget clickable" on:click={() => showNotifModal = true}>
                 <div class="widget-header">
                     <h3>Recent Notifications</h3>
                     <i class="bx bx-bell" style="color: var(--accent-orange)"></i>
@@ -244,7 +238,7 @@
                     {#if notifications.length === 0}
                         <div style="padding:1rem; color:#9ca3af; text-align:center; font-style:italic;">No new alerts</div>
                     {/if}
-                    {#each notifications as notif (notif.id)}
+                    {#each notifications.slice(0, 5) as notif (notif.id)}
                         <div class="notif-card">
                             <div class="notif-dot {notif.isHighlight ? '' : 'silent'}"></div>
                             <div class="notif-content">
@@ -254,9 +248,9 @@
                         </div>
                     {/each}
                 </div>
-            </div>
+            </button>
 
-            <div class="widget habits-widget">
+            <button class="widget habits-widget clickable" on:click={() => showHabitModal = true}>
                 <div class="widget-header">
                     <h3>Habit Breakdown</h3>
                     <i class="bx bx-pie-chart-alt-2" style="color: var(--accent-purple)"></i>
@@ -271,7 +265,7 @@
                         </div>
                         
                         <div class="legend">
-                            {#each categoryStats as stat}
+                            {#each categoryStats.slice(0, 4) as stat}
                                 <div class="legend-item">
                                     <span class="dot" style="background: {stat.color}"></span>
                                     <span class="l-text">{stat.label}</span>
@@ -281,7 +275,7 @@
                         </div>
                     </div>
                 {/if}
-            </div>
+            </button>
 
             <div class="widget deadlines-widget">
                 <h3>Deadlines</h3>
@@ -300,8 +294,104 @@
     </div>
 </div>
 
+<!-- --- MODALS --- -->
+
+{#if showNotifModal}
+    <div class="modal-backdrop" on:click={() => { showNotifModal = false; selectedNotifId = null; }}>
+        <div class="modal-content" on:click|stopPropagation>
+            <div class="modal-header">
+                <h3><i class="bx bx-bell"></i> Recent Alerts</h3>
+                <button class="close-btn" on:click={() => { showNotifModal = false; selectedNotifId = null; }}><i class="bx bx-x"></i></button>
+            </div>
+            
+            <div class="modal-body notif-modal-body">
+                <div class="notif-accordion">
+                    {#each notifications as notif}
+                        <div class="notif-group" class:expanded={selectedNotifId === notif.id}>
+                            <button class="notif-trigger" on:click={() => toggleNotif(notif.id)}>
+                                <div class="notif-dot {notif.isHighlight ? '' : 'silent'}"></div>
+                                <div class="notif-main">
+                                    <p class="notif-title">{notif.title}</p>
+                                    <p class="notif-meta">{notif.time} • {notif.category}</p>
+                                </div>
+                                <i class="bx bx-chevron-down chevron"></i>
+                            </button>
+                            
+                            {#if selectedNotifId === notif.id}
+                                <div class="notif-details" transition:slide={{ duration: 250 }}>
+                                    <div class="details-inner">
+                                        <div class="detail-row">
+                                            <div class="detail-col">
+                                                <label>Task Status</label>
+                                                <p>{notif.status.replace('_', ' ')}</p>
+                                            </div>
+                                            <div class="detail-col">
+                                                <label>Priority Level</label>
+                                                <span class="tag {notif.priority}">{notif.priority}</span>
+                                            </div>
+                                        </div>
+                                        <div class="detail-row">
+                                            <div class="detail-col">
+                                                <label>Source Category</label>
+                                                <p>{notif.category}</p>
+                                            </div>
+                                            <div class="detail-col">
+                                                <label>Received At</label>
+                                                <p>{notif.fullDate}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            {/if}
+                        </div>
+                    {/each}
+                    {#if notifications.length === 0}
+                         <div class="empty-notif">
+                            <i class="bx bx-notification-off"></i>
+                            <p>No notifications in the last 24 hours</p>
+                         </div>
+                    {/if}
+                </div>
+            </div>
+        </div>
+    </div>
+{/if}
+
+{#if showHabitModal}
+    <div class="modal-backdrop" on:click={() => showHabitModal = false}>
+        <div class="modal-content habit-modal" on:click|stopPropagation>
+            <div class="modal-header">
+                <h3><i class="bx bx-pie-chart-alt-2"></i> Habit Breakdown</h3>
+                <button class="close-btn" on:click={() => showHabitModal = false}><i class="bx bx-x"></i></button>
+            </div>
+            <div class="modal-body habit-body">
+                <div class="donut large" style="background: {donutGradient}">
+                    <div class="hole"></div>
+                    <div class="donut-center">
+                        <span class="total-val">{allTasks.length}</span>
+                        <span class="total-lbl">Total Tasks</span>
+                    </div>
+                </div>
+                
+                <div class="full-legend">
+                    {#each categoryStats as stat}
+                        <div class="legend-row">
+                            <span class="dot" style="background: {stat.color}"></span>
+                            <span class="label">{stat.label}</span>
+                            <div class="progress-track">
+                                <div class="progress-fill" style="width: {stat.percent}%; background: {stat.color}"></div>
+                            </div>
+                            <span class="val">{stat.percent}%</span>
+                        </div>
+                    {/each}
+                </div>
+            </div>
+        </div>
+    </div>
+{/if}
+
 <style>
-    /* --- HEADER --- */
+    /* --- SHARED & HEADER --- */
     .top-header {
         height: 4rem;
         display: flex;
@@ -317,332 +407,160 @@
         margin: 0;
         font-weight: 600;
     }
-    /* Removed .status-indicator and .pulse-dot styles since element is removed */
-
-    .header-right {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-    }
-    .search-bar {
-        position: relative;
-        display: none;
-    }
+    .header-right { display: flex; align-items: center; gap: 1rem; }
+    .search-bar { position: relative; display: none; }
     .search-bar input {
         background-color: var(--card-bg);
         border: 1px solid var(--border-color);
         padding: 0.5rem 1rem 0.5rem 2.5rem;
         border-radius: 0.5rem;
         color: var(--text-white);
-        outline: none;
         width: 16rem;
     }
-    .search-bar i {
-        position: absolute;
-        left: 0.75rem;
-        top: 0.6rem;
-        color: var(--text-gray);
-    }
+    .search-bar i { position: absolute; left: 0.75rem; top: 0.6rem; color: var(--text-gray); }
     .avatar {
-        width: 2rem;
-        height: 2rem;
-        border-radius: 50%;
+        width: 2rem; height: 2rem; border-radius: 50%;
         background: linear-gradient(to top right, var(--accent-purple), var(--accent-blue));
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-size: 0.75rem;
-        font-weight: bold;
+        display: flex; align-items: center; justify-content: center;
+        color: white; font-size: 0.75rem; font-weight: bold;
     }
 
-    /* DASHBOARD SCROLL AREA */
-    .dashboard-scroll {
-        flex: 1;
-        overflow-y: auto;
-        padding: 2rem;
-    }
+    /* --- LAYOUT & SCROLL --- */
+    .dashboard-scroll { flex: 1; overflow-y: auto; padding: 2rem; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin-bottom: 1.5rem; }
+    .stat-card { background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1.25rem; }
+    .stat-header { display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.75rem; text-transform: uppercase; font-weight: 600; }
+    .icon-bg { padding: 0.35rem; border-radius: 0.25rem; background-color: var(--card-hover); font-size: 1rem; }
+    .icon-bg.purple { color: var(--accent-purple); }
+    .icon-bg.blue { color: var(--accent-blue); }
+    .icon-bg.orange { color: var(--accent-orange); }
 
-    /* STATS GRID */
-    .stats-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 1.5rem;
-        margin-bottom: 1.5rem;
-    }
-    .stat-card {
-        background-color: var(--card-bg);
-        border: 1px solid var(--border-color);
-        border-radius: 0.75rem;
-        padding: 1.25rem;
-    }
-    .stat-header {
-        display: flex;
-        justify-content: space-between;
-        margin-bottom: 0.5rem;
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        font-weight: 600;
-    }
-    .icon-bg {
-        padding: 0.35rem;
-        border-radius: 0.25rem;
-        background-color: var(--card-hover);
-        font-size: 1rem;
-    }
-    .icon-bg.purple {
-        color: var(--accent-purple);
-    }
-    .icon-bg.blue {
-        color: var(--accent-blue);
-    }
-    .icon-bg.green {
-        color: var(--accent-green);
-    }
-    .icon-bg.orange {
-        color: var(--accent-orange);
-    }
+    .stat-value { font-size: 1.875rem; font-weight: 700; color: var(--text-white); }
+    .stat-sub { font-size: 0.75rem; margin-top: 0.25rem; }
+    .green-text { color: var(--accent-green); }
+    .unit { font-size: 0.875rem; font-weight: 400; color: var(--text-gray); }
 
-    .stat-value {
-        font-size: 1.875rem;
-        font-weight: 700;
-        color: var(--text-white);
-    }
-    .stat-sub {
-        font-size: 0.75rem;
-        margin-top: 0.25rem;
-    }
-    .green-text {
-        color: var(--accent-green);
-    }
-    .unit {
-        font-size: 0.875rem;
-        font-weight: 400;
-        color: var(--text-gray);
-    }
-
-    /* INPUT WRAPPER */
-    .input-wrapper {
-        position: relative;
-        margin-bottom: 1.5rem;
-    }
+    /* --- INPUT --- */
+    .input-wrapper { position: relative; margin-bottom: 1.5rem; }
     .input-wrapper input {
-        width: 100%;
-        background-color: var(--card-bg);
-        border: 1px solid var(--border-color);
-        padding: 0.875rem 3rem;
-        border-radius: 0.75rem;
-        color: var(--text-white);
-        outline: none;
-        box-sizing: border-box;
-        font-size: 1rem;
-        transition:
-            border-color 0.2s,
-            box-shadow 0.2s;
+        width: 100%; background-color: var(--card-bg); border: 1px solid var(--border-color);
+        padding: 0.875rem 3rem; border-radius: 0.75rem; color: var(--text-white); outline: none; font-size: 1rem;
+        transition: border-color 0.2s;
     }
-    .input-wrapper input:focus {
-        border-color: var(--accent-purple);
-        box-shadow: 0 0 0 1px var(--accent-purple);
-    }
-    .mic-icon {
-        position: absolute;
-        left: 1rem;
-        top: 1rem;
-        color: var(--text-gray);
-        font-size: 1.2rem;
-    }
-    .send-btn {
-        position: absolute;
-        right: 0.5rem;
-        top: 0.5rem;
-        background-color: var(--accent-purple);
-        border: none;
-        color: white;
-        padding: 0.35rem 0.5rem;
-        border-radius: 0.5rem;
-        cursor: pointer;
-    }
+    .input-wrapper input:focus { border-color: var(--accent-purple); }
+    .mic-icon { position: absolute; left: 1rem; top: 1rem; color: var(--text-gray); font-size: 1.2rem; }
+    .send-btn { position: absolute; right: 0.5rem; top: 0.5rem; background-color: var(--accent-purple); border: none; color: white; padding: 0.35rem 0.5rem; border-radius: 0.5rem; cursor: pointer; }
 
-    /* WIDGET GRID */
-    .widget-grid {
-        display: grid;
-        grid-template-columns: 1fr;
-        gap: 1.5rem;
-    }
+    /* --- WIDGETS --- */
+    .widget-grid { display: grid; grid-template-columns: 1fr; gap: 1.5rem; }
+    .widget { background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1.25rem; display: flex; flex-direction: column; text-align: left; transition: transform 0.2s, border-color 0.2s; }
+    .widget.clickable { cursor: pointer; }
+    .widget.clickable:hover { border-color: var(--accent-purple); transform: translateY(-2px); }
+    .widget-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; width: 100%; }
+    .widget-header h3 { margin: 0; font-size: 1rem; color: var(--text-white); }
 
-    .widget {
-        background-color: var(--card-bg);
-        border: 1px solid var(--border-color);
-        border-radius: 0.75rem;
-        padding: 1.25rem;
-        display: flex;
-        flex-direction: column;
-    }
-    .widget-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 1rem;
-        border-bottom: 1px solid var(--border-color);
-        padding-bottom: 1rem;
-    }
-    .widget-header h3 {
-        margin: 0;
-        font-size: 1rem;
-        color: var(--text-white);
-    }
+    .notif-card { display: flex; align-items: center; padding: 0.75rem; background: rgba(255, 255, 255, 0.03); border-radius: 0.5rem; margin-bottom: 0.5rem; border-left: 3px solid var(--accent-orange); width: 100%; }
+    .notif-dot { width: 0.5rem; height: 0.5rem; background: var(--accent-orange); border-radius: 50%; margin-right: 0.75rem; flex-shrink: 0; }
+    .notif-dot.silent { background: var(--text-gray); }
+    .notif-title { color: var(--text-white); font-size: 0.85rem; font-weight: 500; margin: 0; }
+    .notif-time { color: var(--text-gray); font-size: 0.7rem; margin: 0.2rem 0 0 0; }
 
-    /* NOTIFICATION WIDGET */
-    .notif-card {
-        display: flex;
-        align-items: center;
-        padding: 0.75rem;
-        background: rgba(255, 255, 255, 0.03);
-        border-radius: 0.5rem;
-        margin-bottom: 0.5rem;
-        border-left: 3px solid var(--accent-orange);
-    }
-    .notif-dot {
-        width: 0.5rem;
-        height: 0.5rem;
-        background: var(--accent-orange);
-        border-radius: 50%;
-        margin-right: 0.75rem;
-    }
-    .notif-dot.silent {
-        background: var(--text-gray);
-    }
-    .notif-title {
-        color: var(--text-white);
-        font-size: 0.85rem;
-        font-weight: 500;
-        margin: 0;
-    }
-    .notif-time {
-        color: var(--text-gray);
-        font-size: 0.7rem;
-        margin: 0.2rem 0 0 0;
-    }
+    .tasks-widget { min-height: 400px; }
+    .task-item { display: flex; align-items: center; padding: 0.75rem; border-radius: 0.5rem; margin-bottom: 0.25rem; }
+    .task-text { flex: 1; font-size: 0.875rem; color: #d1d5db; margin: 0 0.75rem; }
+    .circle { width: 1.25rem; height: 1.25rem; border: 2px solid #4b5563; border-radius: 50%; }
+    .tag { font-size: 0.625rem; padding: 0.1rem 0.5rem; border-radius: 0.25rem; }
+    .tag.high { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    .tag.mid { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+    .tag.low { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
 
-    /* TASKS */
-    .tasks-widget {
-        min-height: 400px;
-    }
-    .task-item {
-        display: flex;
-        align-items: center;
-        padding: 0.75rem;
-        border-radius: 0.5rem;
-        cursor: pointer;
-        transition: background 0.2s;
-        margin-bottom: 0.25rem;
-    }
-    .task-item:hover {
-        background-color: var(--card-hover);
-    }
-    .task-item .task-text {
-        flex: 1;
-        font-size: 0.875rem;
-        color: #d1d5db;
-        margin: 0 0.75rem;
-    }
-    .task-item:hover .task-text {
-        color: white;
-    }
-    .circle {
-        width: 1.25rem;
-        height: 1.25rem;
-        border: 2px solid #4b5563;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 0.75rem;
-    }
-    .circle.checked {
-        background-color: var(--accent-green);
-        border-color: var(--accent-green);
-        color: black;
-    }
-    .tag {
-        background-color: #2a2b3d;
-        color: #9ca3af;
-        font-size: 0.625rem;
-        padding: 0.1rem 0.5rem;
-        border-radius: 0.25rem;
-        margin-right: 0.5rem;
-    }
-    .task-item.completed .task-text {
-        text-decoration: line-through;
-        color: #6b7280;
-    }
-    .task-item.completed {
-        opacity: 0.6;
-    }
-
-    /* SIDE WIDGETS */
-    .side-widgets {
-        display: flex;
-        flex-direction: column;
-        gap: 1.5rem;
-    }
-    
-    /* REMOVED: Chart Widget Styles */
-    
-    /* DONUT CHART (Replaced Chart Widget) */
+    .side-widgets { display: flex; flex-direction: column; gap: 1.5rem; }
     .habits-widget { min-height: 140px; }
-    .donut-row { display: flex; align-items: center; gap: 1rem; margin-top: 0.5rem; justify-content: center; }
+    .donut-row { display: flex; align-items: center; gap: 1rem; margin-top: 0.5rem; justify-content: center; width: 100%; }
     .donut { width: 80px; height: 80px; border-radius: 50%; position: relative; flex-shrink: 0; background-color: #2a2b3d; }
-    .donut .hole { position: absolute; top: 12px; left: 12px; right: 12px; bottom: 12px; background: var(--card-bg); border-radius: 50%; }
+    .donut.large { width: 180px; height: 180px; margin: 0 auto; }
+    .donut .hole { position: absolute; background: var(--card-bg); border-radius: 50%; }
+    .donut:not(.large) .hole { top: 12px; left: 12px; right: 12px; bottom: 12px; }
+    .donut.large .hole { top: 30px; left: 30px; right: 30px; bottom: 30px; }
+    
     .legend { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.75rem; }
     .legend-item { display: flex; align-items: center; gap: 0.4rem; color: var(--text-gray); }
     .dot { width: 8px; height: 8px; border-radius: 2px; }
     .l-text { color: white; }
     .l-pct { margin-left: auto; color: var(--text-gray); }
 
-    /* DEADLINES */
-    .deadlines-widget {
-        flex: 1;
+    .deadline-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; font-size: 0.875rem; }
+    .deadline-title { display: flex; align-items: center; color: var(--text-gray); gap: 0.5rem; }
+    .time-left { font-size: 0.75rem; color: #6b7280; }
+
+    /* --- MODALS --- */
+    .modal-backdrop {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.85); backdrop-filter: blur(6px);
+        display: flex; align-items: center; justify-content: center; z-index: 1000;
     }
-    .deadline-item {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 0.75rem;
-        font-size: 0.875rem;
+    .modal-content {
+        background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 1.5rem;
+        width: 90%; max-width: 600px; max-height: 85vh; display: flex; flex-direction: column; overflow: hidden;
     }
-    .deadline-title {
-        display: flex;
-        align-items: center;
-        color: var(--text-gray);
+    .modal-header {
+        padding: 1.5rem; border-bottom: 1px solid var(--border-color);
+        display: flex; justify-content: space-between; align-items: center;
     }
-    .deadline-title.red-text {
-        color: var(--accent-red);
+    .modal-header h3 { margin: 0; color: white; display: flex; align-items: center; gap: 0.75rem; font-size: 1.1rem; }
+    .close-btn { background: none; border: none; color: var(--text-gray); cursor: pointer; font-size: 1.5rem; transition: color 0.2s; }
+    .close-btn:hover { color: white; }
+    
+    .modal-body { flex: 1; overflow-y: auto; padding: 1.5rem; }
+
+    /* --- NOTIF ACCORDION --- */
+    .notif-accordion { display: flex; flex-direction: column; gap: 0.75rem; }
+    .notif-group {
+        border: 1px solid var(--border-color); border-radius: 1rem; background: rgba(255, 255, 255, 0.02);
+        overflow: hidden; transition: all 0.3s ease;
     }
-    .deadline-title i {
-        margin-right: 0.5rem;
-        font-size: 1.1rem;
+    .notif-group.expanded { border-color: var(--accent-purple); background: rgba(99, 102, 241, 0.05); }
+    .notif-trigger {
+        width: 100%; padding: 1.25rem; display: flex; align-items: center; gap: 1rem;
+        background: none; border: none; cursor: pointer; text-align: left;
     }
-    .time-left {
-        font-size: 0.75rem;
-        color: #6b7280;
+    .notif-main { flex: 1; }
+    .notif-group .chevron { color: var(--text-gray); transition: transform 0.3s; }
+    .notif-group.expanded .chevron { transform: rotate(180deg); color: var(--accent-purple); }
+    .notif-meta { font-size: 0.7rem; color: var(--text-gray); margin: 0.25rem 0 0; }
+    
+    .notif-details { border-top: 1px solid rgba(255, 255, 255, 0.05); }
+    .details-inner { padding: 1.25rem; display: flex; flex-direction: column; gap: 1.25rem; }
+    .detail-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .detail-col label { display: block; font-size: 0.65rem; text-transform: uppercase; color: var(--text-gray); margin-bottom: 0.4rem; letter-spacing: 0.05em; }
+    .detail-col p { margin: 0; color: white; font-size: 0.9rem; font-weight: 500; }
+    
+    .empty-notif { text-align: center; padding: 4rem 2rem; color: var(--text-gray); }
+    .empty-notif i { font-size: 3rem; opacity: 0.2; margin-bottom: 1rem; display: block; }
+
+    /* --- HABIT MODAL --- */
+    .habit-modal { max-width: 500px; }
+    .habit-body { padding: 2.5rem; display: flex; flex-direction: column; gap: 2.5rem; }
+    .donut-center {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
     }
+    .total-val { font-size: 2.5rem; font-weight: 800; color: white; line-height: 1; }
+    .total-lbl { font-size: 0.8rem; color: var(--text-gray); text-transform: uppercase; }
+    .full-legend { display: flex; flex-direction: column; gap: 1.25rem; }
+    .legend-row { display: flex; align-items: center; gap: 1rem; }
+    .legend-row .label { width: 80px; color: white; font-size: 0.85rem; }
+    .progress-track { flex: 1; height: 6px; background: var(--bg-dark); border-radius: 3px; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 3px; }
+    .legend-row .val { width: 40px; text-align: right; color: var(--text-gray); font-size: 0.85rem; font-weight: 600; }
 
     @media (min-width: 1024px) {
-        .search-bar {
-            display: block;
-        }
-        .widget-grid {
-            grid-template-columns: 2fr 1fr;
-        }
+        .search-bar { display: block; }
+        .widget-grid { grid-template-columns: 2fr 1fr; }
     }
-
     @media (max-width: 768px) {
-        .top-header {
-            padding: 0 1rem;
-        }
-        .search-bar {
-            display: none;
-        }
+        .top-header { padding: 0 1rem; }
+        .dashboard-scroll { padding: 1rem; }
+        .detail-row { grid-template-columns: 1fr; }
     }
 </style>

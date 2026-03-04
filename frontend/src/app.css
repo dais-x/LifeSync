@@ -1,6 +1,16 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+* {
+	box-sizing: border-box;
+	-webkit-tap-highlight-color: transparent;
+}
+
+*:focus {
+	outline: none !important;
+}
+
 /* src/app.css */
 :root {
 	--bg-dark: #0b0c15;
