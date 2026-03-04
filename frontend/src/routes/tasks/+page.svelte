@@ -44,6 +44,8 @@
     let inProgress = $state([]);
     let completed = $state([]);
     let todoFilter = $state('all'); 
+    let filterStartDate = $state('');
+    let filterEndDate = $state('');
 
     let notificationMessage = $state('');
     let notificationKey = $state(0);
@@ -56,11 +58,20 @@
         const now = new Date();
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
         const tomorrow = today + 86400000;
+        const nextWeek = today + 7 * 86400000;
+
         return todo.filter(t => {
-            if (!t.deadline) return todoFilter === 'all';
+            if (!t.deadline) return false;
             const d = new Date(t.deadline).getTime();
             if (todoFilter === 'today') return d >= today && d < tomorrow;
             if (todoFilter === 'tomorrow') return d >= tomorrow && d < (tomorrow + 86400000);
+            if (todoFilter === 'week') return d >= today && d < nextWeek;
+            if (todoFilter === 'daterange') {
+                if (!filterStartDate || !filterEndDate) return true;
+                const start = new Date(filterStartDate).getTime();
+                const end = new Date(filterEndDate).getTime() + 86400000;
+                return d >= start && d < end;
+            }
             return true;
         });
     });
@@ -240,7 +251,16 @@
                                 <select bind:value={todoFilter} class="todo-filter-select">
                                     <option value="all">All</option>
                                     <option value="today">Today</option>
+                                    <option value="tomorrow">Tomorrow</option>
+                                    <option value="week">This Week</option>
+                                    <option value="daterange">Date Range</option>
                                 </select>
+                                {#if todoFilter === 'daterange'}
+                                    <div class="range-inputs" transition:slide>
+                                        <input type="date" bind:value={filterStartDate} class="range-date-input" />
+                                        <input type="date" bind:value={filterEndDate} class="range-date-input" />
+                                    </div>
+                                {/if}
                             </div>
                         </div>
                         <span class="badge">{filteredTodo.length}</span>
@@ -422,8 +442,11 @@
     /* --- KANBAN STYLES --- */
     .kanban-col { background: var(--card-bg); padding: 1.5rem; border-radius: 1.5rem; border: 1px solid var(--border-color); min-height: 500px; }
     .col-header { display: flex; justify-content: space-between; align-items: center; color: white; font-weight: 700; margin-bottom: 1.5rem; }
-    .header-left-side { display: flex; align-items: center; gap: 0.75rem; }
+    .header-left-side { display: flex; align-items: flex-start; gap: 0.75rem; }
     .todo-filter-select { background: #1e1f2e; color: var(--text-gray); border: 1px solid var(--border-color); padding: 0.2rem 0.5rem; border-radius: 0.4rem; font-size: 0.75rem; outline: none; }
+    .filter-wrapper { display: flex; flex-direction: column; gap: 0.4rem; }
+    .range-inputs { display: flex; flex-direction: column; gap: 0.3rem; }
+    .range-date-input { background: #1e1f2e; color: var(--text-gray); border: 1px solid var(--border-color); padding: 0.2rem 0.4rem; border-radius: 0.4rem; font-size: 0.7rem; outline: none; color-scheme: dark; }
     .badge { background: #1e1f2e; color: var(--text-gray); padding: 0.1rem 0.5rem; border-radius: 1rem; font-size: 0.75rem; }
 
     .task-card { background: #1e1f2e; padding: 1.25rem; border-radius: 1rem; border: 1px solid var(--border-color); margin-bottom: 1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); cursor: pointer; }
