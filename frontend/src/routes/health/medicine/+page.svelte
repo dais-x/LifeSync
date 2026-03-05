@@ -9,11 +9,11 @@
     let capturedImage = $state(null);
     let editingMedicine = $state(null);
     let cameraActive = $state(false);
-    let isAnalyzing = $state(false); // Added for AI processing state
+    let isAnalyzing = $state(false); 
 
     // State array for medicines
     let medicines = $state([]);
-    let isLoading = $state(true); // Loading state for fetching data
+    let isLoading = $state(true); // Initial loading state
 
     let newMed = $state({
         nickname: '',
@@ -23,13 +23,12 @@
         endDate: '',
         food: 'any',
         currentStock: 0,
-        dosageText: '' // Added for AI prompt
+        dosageText: ''
     });
 
     // ==========================================
     // DATA FETCHING (Single Source of Truth)
     // ==========================================
-    // Added showSpinner so background syncs don't interrupt the user
     async function loadMedicines(showSpinner = true) {
         if (showSpinner) isLoading = true;
         try {
@@ -48,7 +47,6 @@
         }
     }
 
-    // Fetch the medicines from MongoDB on component mount
     onMount(() => {
         loadMedicines();
     });
@@ -108,7 +106,7 @@
     }
 
     async function processCapturedImage(base64Data) {
-        console.log('Processing captured image... Image held in state for AI processing.');
+        console.log('Processing captured image...');
     }
 
     async function takePicture() {
@@ -297,14 +295,14 @@
         event.preventDefault();
         
         // CRITICAL FIX: Deep clone newMed immediately.
-        // This permanently detaches it from the Svelte $state proxy, guaranteeing 
-        // that when we clear the form later, it doesn't accidentally clear our UI updates.
+        // This detaches it from the Svelte UI so when closePopup() clears the form,
+        // it doesn't accidentally wipe the newly added card blank on your screen!
         const medData = JSON.parse(JSON.stringify(newMed));
         
         const currentMode = entryMode;
         const editId = editingMedicine ? (editingMedicine._id || editingMedicine.id) : null;
         
-        isLoading = true; // Show loading state
+        // Do NOT set isLoading = true here. We want a perfectly smooth optimistic UI update!
 
         try {
             if (currentMode === 'edit') {
@@ -319,8 +317,9 @@
                     medicines[index] = { 
                         ...medicines[index], 
                         ...medData,
-                        nickname: medData.nickname || medData.name || "Unnamed",
-                        medicine_name: medData.name || "Unknown"
+                        nickname: medData.nickname || medData.name || "Unnamed Med",
+                        title: medData.nickname || medData.name || "Unnamed Med",
+                        medicine_name: medData.name || "Unknown Medicine"
                     };
                 }
 
@@ -330,6 +329,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ action: 'update', id: editId, data: medData })
                 }).then(res => {
+                    // Silently pull fresh data in the background to ensure DB consistency
                     if (res.ok) setTimeout(() => loadMedicines(false), 1000);
                 });
 
@@ -363,7 +363,7 @@
             alert(`Network error during manual save: ${e.message}`);
         }
 
-        // Close and wipe the form AFTER everything is safely sent and rendered
+        // Close and wipe the form AFTER everything is safely sent and rendered to the screen
         closePopup();
     }
 
@@ -419,7 +419,7 @@
 
 <div class="scroll-area fade-in">
     <div class="page-header">
-        <h2 class="page-title">Medication</h2>
+        <h2 class="page-title">My Medications</h2>
         <button class="add-btn" on:click={openAddPopup}>
             <i class="bx bx-plus"></i> Add Medicine
         </button>
@@ -429,7 +429,7 @@
         {#if isLoading}
             <div class="loading-state" style="color: var(--text-gray); text-align: center; grid-column: 1 / -1; padding: 2rem;">
                 <i class='bx bx-loader-alt bx-spin' style="font-size: 2rem; margin-bottom: 1rem;"></i>
-                <p>Syncing with Database...</p>
+                <p>Loading your medicines...</p>
             </div>
         {:else if medicines.length === 0}
             <div class="empty-state" style="color: var(--text-gray); text-align: center; grid-column: 1 / -1; padding: 2rem;">
@@ -461,7 +461,7 @@
 
                     <div class="card-bottom">
                         <div class="dosage-info">
-                            <div class="dosage-pill"><i class='bx bx-time-five'></i> {(med.directions || ['0','0','0','0']).join('-')}</div>
+                            <div class="dosage-pill"><i class='bx bx-time-five'></i> {(Array.isArray(med.directions) ? med.directions : ['0','0','0','0']).join('-')}</div>
                             <div class="dosage-pill"><i class='bx bx-restaurant'></i> {med.food || 'any'}</div>
                         </div>
                         
