@@ -32,7 +32,7 @@
     async function loadMedicines(showSpinner = true) {
         if (showSpinner) isLoading = true;
         try {
-            const getMedsUrl = 'https://fahim-n8n.laddu.cc/webhook-test/get-meds';
+            const getMedsUrl = 'https://fahim-n8n.laddu.cc/webhook/get-meds';
             const response = await fetch(getMedsUrl);
 
             if (response.ok) {
@@ -212,7 +212,7 @@
             medicines = medicines.filter(m => (m._id || m.id) !== medId);
             
             // Background sync
-            fetch('https://fahim-n8n.laddu.cc/webhook-test/manage-meds', {
+            fetch('https://fahim-n8n.laddu.cc/webhook/manage-meds', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'delete', id: medId })
@@ -324,7 +324,7 @@
                 }
 
                 // Background sync
-                fetch('https://fahim-n8n.laddu.cc/webhook-test/manage-meds', {
+                fetch('https://fahim-n8n.laddu.cc/webhook/manage-meds', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ action: 'update', id: editId, data: medData })
