@@ -346,7 +346,7 @@
                 medicines = [...medicines, optimisticMed];
 
                 // Background sync
-                fetch('https://fahim-n8n.laddu.cc/webhook-test/manage-meds', {
+                fetch('https://fahim-n8n.laddu.cc/webhook/manage-meds', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ action: 'create', data: medData })
@@ -372,7 +372,7 @@
         isAnalyzing = true;
 
         try {
-            const webhookUrl = 'https://fahim-n8n.laddu.cc/webhook-test/upload-medicine';
+            const webhookUrl = 'https://fahim-n8n.laddu.cc/webhook/upload-medicine';
             const payload = {
                 image: capturedImage,
                 dosage: newMed.dosageText

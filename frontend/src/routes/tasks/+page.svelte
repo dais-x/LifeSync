@@ -8,12 +8,18 @@
     const SEND_URL = 'https://fahim-n8n.laddu.cc/webhook/sync-task';
     const GET_URL = 'https://fahim-n8n.laddu.cc/webhook/get-tasks';
     const MANAGE_URL = 'https://fahim-n8n.laddu.cc/webhook/manage-task';
-    const CURRENT_USER_ID = "user_456"; 
+    const CURRENT_USER_ID = "user_456";
 
     // --- STATE ---
     let showAddTaskPopup = $state(false);
-    let activeIndex = $state(0); 
-    
+    let activeIndex = $state(0);
+
+    // AI PDF Upload State
+    let taskEntryMode = $state('manual'); // 'manual' or 'pdf'
+    let selectedFile = $state(null);
+    let isUploading = $state(false);
+    let aiInstruction = $state(''); // NEW: Custom AI Instruction state
+
     // Swipe Logic
     let startX = 0;
     let currentX = 0;
@@ -26,7 +32,7 @@
     let newTaskTime = $state('23:59');
     let newTaskPriority = $state('mid');
     let repeatOption = $state('never');
-    
+
     let categories = $state([
         { name: 'Study', color: '#6366f1' },
         { name: 'Work', color: '#3b82f6' },
@@ -43,13 +49,13 @@
     let todo = $state([]);
     let inProgress = $state([]);
     let completed = $state([]);
-    let todoFilter = $state('all'); 
+    let todoFilter = $state('all');
     let filterStartDate = $state('');
     let filterEndDate = $state('');
 
     let notificationMessage = $state('');
     let notificationKey = $state(0);
-    let selectedTask = $state(null); 
+    let selectedTask = $state(null);
     let activeMenu = $state(null);
 
     // --- DERIVED ---
@@ -125,7 +131,7 @@
         const combinedDeadline = newTaskDeadline ? `${newTaskDeadline} ${newTaskTime}` : '';
         const catObj = categories.find(c => c.name === selectedCategory);
         const payload = {
-            user_id: CURRENT_USER_ID, title: newTaskName, status: "pending", 
+            user_id: CURRENT_USER_ID, title: newTaskName, status: "pending",
             priority: newTaskPriority, category: selectedCategory, deadline: combinedDeadline,
             timestamp: new Date().toISOString(), color: catObj?.color || '#6366f1'
         };
@@ -134,6 +140,63 @@
             togglePopup();
             fetchTasks();
         } catch (error) { console.error(error); }
+    }
+
+    // --- AI PDF UPLOAD LOGIC ---
+    function handleFileChange(event) {
+        const file = event.target.files[0];
+        if (file && file.type === 'application/pdf') {
+            selectedFile = file;
+        } else {
+            alert("Please select a valid PDF file.");
+            event.target.value = '';
+        }
+    }
+
+    function removeFile() {
+        selectedFile = null;
+    }
+
+    async function handlePdfUpload(event) {
+        event.preventDefault();
+        if (!selectedFile) return;
+        isUploading = true;
+
+        const catObj = categories.find(c => c.name === selectedCategory);
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const base64Data = e.target.result;
+            const payload = {
+                fileName: selectedFile.name,
+                fileData: base64Data,
+                user_id: CURRENT_USER_ID,
+                category: selectedCategory,
+                color: catObj?.color || '#6366f1',
+                instruction: aiInstruction, // NEW: Pass the instruction to n8n
+                timestamp: new Date().toISOString()
+            };
+
+            const uploadUrl = 'https://fahim-n8n.laddu.cc/webhook/upload-task-pdf';
+
+            // Send to n8n asynchronously
+            fetch(uploadUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            }).then(res => {
+                if(res.ok) {
+                    // Fetch background updates after a generous delay (AI processing time)
+                    setTimeout(() => fetchTasks(), 6000);
+                }
+            }).catch(e => console.error("PDF upload error", e));
+
+            alert("Schedule uploaded! 🚀\nAI is breaking it down into tasks. They will appear here shortly.");
+            togglePopup();
+            isUploading = false;
+        };
+        reader.onerror = () => { alert("Error reading file."); isUploading = false; };
+        reader.readAsDataURL(selectedFile);
     }
 
     async function apiManageTask(action, task, updateFields = {}) {
@@ -145,12 +208,18 @@
     function sortTodo() {
         const pMap = { 'high': 3, 'mid': 2, 'low': 1 };
         todo.sort((a, b) => (pMap[b.priority] || 0) - (pMap[a.priority] || 0));
-        todo = [...todo]; 
+        todo = [...todo];
     }
 
-    function togglePopup() { 
-        showAddTaskPopup = !showAddTaskPopup; 
-        if (!showAddTaskPopup) { newTaskName = ''; newTaskDeadline = ''; }
+    function togglePopup() {
+        showAddTaskPopup = !showAddTaskPopup;
+        if (!showAddTaskPopup) { 
+            newTaskName = ''; 
+            newTaskDeadline = ''; 
+            taskEntryMode = 'manual'; 
+            selectedFile = null; 
+            aiInstruction = ''; // Reset instruction
+        }
     }
 
     function handleAddCategory() {
@@ -233,14 +302,13 @@
     </div>
 
     <!-- Swipeable Carousel Container -->
-    <div class="carousel-container" 
-         ontouchstart={handleTouchStart} 
-         ontouchmove={handleTouchMove} 
+    <div class="carousel-container"
+         ontouchstart={handleTouchStart}
+         ontouchmove={handleTouchMove}
          ontouchend={handleTouchEnd}
     >
-        <!-- Corrected Alignment: Each card is 85% width. To center, we shift by (activeIndex * 85%) and add (100% - 85%) / 2 = 7.5% -->
         <div class="carousel-track" style="transform: translate3d(calc(-{activeIndex * 85}% + 7.5% + {$swipeOffset}px), 0, 0)">
-            
+
             <!-- COLUMN: TO DO -->
             <div class="carousel-item" class:active={activeIndex === 0}>
                 <div class="kanban-col">
@@ -311,8 +379,8 @@
                                     </div>
                                 </div>
                                 <h4>{task.name}</h4>
-                                <input type="range" min="0" max="100" value={task.progress} 
-                                    oninput={(e) => handleProgressChange(task, e)} 
+                                <input type="range" min="0" max="100" value={task.progress}
+                                    oninput={(e) => handleProgressChange(task, e)}
                                     onclick={(e) => e.stopPropagation()}
                                     class="progress-slider" style="accent-color: {getCatColor(task.category)}" />
                             </div>
@@ -353,50 +421,115 @@
 {#if showAddTaskPopup}
     <div class="popup-backdrop" onclick={togglePopup}>
         <div class="popup" onclick={(e) => e.stopPropagation()}>
-            <div class="popup-header"><h3>Add New Task</h3><button class="close-btn" onclick={togglePopup}><i class="bx bx-x"></i></button></div>
-            <form onsubmit={(e) => { e.preventDefault(); handleAddTask(); }} class="task-form">
-                <div class="form-row">
-                    <div class="form-group" style="flex: 2;"><label>Task Name</label><input type="text" bind:value={newTaskName} placeholder="Task title"></div>
-                    <div class="form-group"><label>Date</label><input type="date" bind:value={newTaskDeadline}></div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group"><label>Priority</label>
-                        <select bind:value={newTaskPriority}><option value="low">Low</option><option value="mid">Mid</option><option value="high">High</option><option value="past_deadline">Past Deadline</option></select>
+            <div class="popup-header">
+                <h3>Add New Task</h3>
+                <button class="close-btn" onclick={togglePopup}><i class="bx bx-x"></i></button>
+            </div>
+
+            <!-- TABS FOR MANUAL OR AI IMPORT -->
+            <div class="entry-tabs">
+                <button type="button" class:active={taskEntryMode === 'manual'} onclick={() => taskEntryMode = 'manual'}>
+                    <i class='bx bx-edit-alt'></i> Manual Entry
+                </button>
+                <button type="button" class:active={taskEntryMode === 'pdf'} onclick={() => taskEntryMode = 'pdf'}>
+                    <i class='bx bx-brain'></i> AI Schedule
+                </button>
+            </div>
+
+            {#if taskEntryMode === 'manual'}
+                <form onsubmit={(e) => { e.preventDefault(); handleAddTask(); }} class="task-form fade-in">
+                    <div class="form-row">
+                        <div class="form-group" style="flex: 2;"><label>Task Name</label><input type="text" bind:value={newTaskName} placeholder="Task title"></div>
+                        <div class="form-group"><label>Date</label><input type="date" bind:value={newTaskDeadline}></div>
                     </div>
-                    <div class="form-group"><label>Time</label><input type="time" bind:value={newTaskTime}></div>
-                    <div class="form-group"><label>Repeat</label>
-                        <select bind:value={repeatOption}><option value="never">Never</option><option value="daily">Daily</option><option value="weekdays">Week days</option></select>
+                    <div class="form-row">
+                        <div class="form-group"><label>Priority</label>
+                            <select bind:value={newTaskPriority}><option value="low">Low</option><option value="mid">Mid</option><option value="high">High</option><option value="past_deadline">Past Deadline</option></select>
+                        </div>
+                        <div class="form-group"><label>Time</label><input type="time" bind:value={newTaskTime}></div>
+                        <div class="form-group"><label>Repeat</label>
+                            <select bind:value={repeatOption}><option value="never">Never</option><option value="daily">Daily</option><option value="weekdays">Week days</option></select>
+                        </div>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label>Category Color</label>
-                    <div class="color-grid">
-                        {#each presetColors as color}
-                            <button type="button" class="color-circle" class:selected={newCategoryColor === color} style="background: {color}" onclick={() => newCategoryColor = color}></button>
-                        {/each}
-                        <button type="button" class="shuffle-btn" onclick={randomizeNewCategoryColor}><i class="bx bx-shuffle"></i></button>
+                    <div class="form-group">
+                        <label>Category Color</label>
+                        <div class="color-grid">
+                            {#each presetColors as color}
+                                <button type="button" class="color-circle" class:selected={newCategoryColor === color} style="background: {color}" onclick={() => newCategoryColor = color}></button>
+                            {/each}
+                            <button type="button" class="shuffle-btn" onclick={randomizeNewCategoryColor}><i class="bx bx-shuffle"></i></button>
+                        </div>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label>Category Name</label>
-                    <div class="category-list">
-                        {#each categories as category}
-                            <div class="category-item">
-                                <label class:selected={selectedCategory === category.name}>
-                                    <input type="radio" name="cat" value={category.name} onchange={() => selectedCategory = category.name} checked={selectedCategory === category.name}>
-                                    <span class="cat-dot" style="background: {category.color}"></span> {category.name}
-                                </label>
-                                <button type="button" class="delete-category-btn" onclick={() => handleDeleteCategory(category.name)}><i class="bx bx-trash"></i></button>
+                    <div class="form-group">
+                        <label>Category Name</label>
+                        <div class="category-list">
+                            {#each categories as category}
+                                <div class="category-item">
+                                    <label class:selected={selectedCategory === category.name}>
+                                        <input type="radio" name="cat" value={category.name} onchange={() => selectedCategory = category.name} checked={selectedCategory === category.name}>
+                                        <span class="cat-dot" style="background: {category.color}"></span> {category.name}
+                                    </label>
+                                    <button type="button" class="delete-category-btn" onclick={() => handleDeleteCategory(category.name)}><i class="bx bx-trash"></i></button>
+                                </div>
+                            {/each}
+                        </div>
+                        <div class="add-category-v2">
+                            <input type="text" bind:value={newCategoryInput} placeholder="New category...">
+                            <button type="button" onclick={handleAddCategory} class="add-category-btn"><i class="bx bx-plus"></i> Add</button>
+                        </div>
+                    </div>
+                    <button type="submit" class="save-btn">Add Task</button>
+                </form>
+            {:else}
+                <!-- AI PDF UPLOAD FORM -->
+                <form onsubmit={handlePdfUpload} class="task-form fade-in">
+                    <p class="helper-text">Upload a timetable, syllabus, or exam schedule. AI will magically extract all deadlines and convert them into tasks.</p>
+                    
+                    {#if !selectedFile}
+                        <div class="file-dropzone" onclick={() => document.getElementById('task-pdf-upload').click()}>
+                            <i class='bx bxs-cloud-upload drop-icon'></i>
+                            <h4>Select a PDF Schedule</h4>
+                        </div>
+                        <input type="file" id="task-pdf-upload" accept="application/pdf" style="display: none;" onchange={handleFileChange}>
+                    {:else}
+                        <div class="selected-file-card">
+                            <div class="file-info">
+                                <i class='bx bxs-file-pdf file-icon'></i>
+                                <span class="file-name">{selectedFile.name}</span>
                             </div>
-                        {/each}
-                    </div>
-                    <div class="add-category-v2">
-                        <input type="text" bind:value={newCategoryInput} placeholder="New category...">
-                        <button type="button" onclick={handleAddCategory} class="add-category-btn"><i class="bx bx-plus"></i> Add</button>
-                    </div>
-                </div>
-                <button type="submit" class="save-btn">Add Task</button>
-            </form>
+                            <button type="button" class="remove-file-btn" onclick={removeFile}><i class='bx bx-trash'></i></button>
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 1rem;">
+                            <label>Apply Category to All Extracted Tasks</label>
+                            <div class="category-list">
+                                {#each categories as category}
+                                    <div class="category-item">
+                                        <label class:selected={selectedCategory === category.name}>
+                                            <input type="radio" name="pdf_cat" value={category.name} onchange={() => selectedCategory = category.name} checked={selectedCategory === category.name}>
+                                            <span class="cat-dot" style="background: {category.color}"></span> {category.name}
+                                        </label>
+                                    </div>
+                                {/each}
+                            </div>
+                        </div>
+
+                        <!-- NEW: Custom AI Instruction Input -->
+                        <div class="form-group" style="margin-bottom: 1.5rem;">
+                            <label for="pdfInstruction">Custom Instructions (Optional)</label>
+                            <textarea id="pdfInstruction" rows="2" placeholder="e.g., Only extract exams for my discipline (Computer Science)" bind:value={aiInstruction}></textarea>
+                        </div>
+
+                        <button type="submit" class="save-btn ai-btn" disabled={isUploading}>
+                            {#if isUploading}
+                                <i class='bx bx-loader-alt bx-spin'></i> Uploading to AI...
+                            {:else}
+                                <i class='bx bx-brain'></i> Extract Tasks
+                            {/if}
+                        </button>
+                    {/if}
+                </form>
+            {/if}
         </div>
     </div>
 {/if}
@@ -422,7 +555,7 @@
     /* --- HEADER --- */
     .header-actions { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
     h2 { color: white; margin: 0; }
-    .new-task-btn { background: var(--accent-purple); color: white; border: none; padding: 0.6rem 1rem; border-radius: 0.5rem; cursor: pointer; font-weight: 600; }
+    .new-task-btn { background: var(--accent-purple); color: white; border: none; padding: 0.6rem 1rem; border-radius: 0.5rem; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 0.4rem; }
     .ghost-alert { background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.3); padding: 1rem; border-radius: 0.75rem; display: flex; gap: 1rem; margin-bottom: 1.5rem; }
     .ghost-alert i { font-size: 1.5rem; color: var(--accent-purple); }
     .ghost-alert h4 { color: white; margin: 0; font-size: 0.9rem; }
@@ -453,7 +586,7 @@
     .task-card:hover { border-color: var(--accent-purple); }
     .task-card.completed h4 { text-decoration: line-through; opacity: 0.5; }
     .task-card h4 { color: white; margin: 0.75rem 0 0; font-size: 1rem; }
-    
+
     .card-header-actions { display: flex; justify-content: space-between; align-items: flex-start; }
     .tag { font-size: 0.65rem; padding: 0.2rem 0.5rem; border-radius: 0.3rem; background: rgba(255,255,255,0.05); color: white; border-left: 3px solid; }
     .tag-priority { font-size: 0.6rem; text-transform: uppercase; font-weight: 800; color: #fff; margin-left: 5px; }
@@ -475,12 +608,30 @@
     .popup { background: var(--card-bg); border-radius: 1.5rem; padding: 1.5rem; width: 90%; max-width: 550px; max-height: 85vh; overflow-y: auto; border: 1px solid var(--border-color); }
     .popup-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
     .close-btn { background: none; border: none; color: var(--text-gray); font-size: 1.5rem; cursor: pointer; }
+    
+    /* NEW: Entry Tabs CSS */
+    .entry-tabs { display: flex; gap: 0.5rem; background: #1e1f2e; padding: 0.4rem; border-radius: 0.75rem; margin-bottom: 1.5rem; border: 1px solid var(--border-color); }
+    .entry-tabs button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.5rem; background: transparent; color: var(--text-gray); border: none; padding: 0.6rem; border-radius: 0.5rem; font-weight: 600; cursor: pointer; transition: 0.2s; }
+    .entry-tabs button.active { background: var(--accent-purple); color: white; }
+
+    /* NEW: File Dropzone CSS */
+    .file-dropzone { border: 2px dashed #3b3b54; border-radius: 1rem; padding: 3rem 1.5rem; text-align: center; cursor: pointer; transition: all 0.2s; background: rgba(255, 255, 255, 0.02); }
+    .file-dropzone:hover { border-color: var(--accent-purple); background: rgba(139, 92, 246, 0.05); }
+    .drop-icon { font-size: 3rem; color: #64748b; margin-bottom: 1rem; }
+    .file-dropzone h4 { color: white; margin: 0 0 0.5rem 0; font-size: 1.1rem; }
+    .selected-file-card { display: flex; justify-content: space-between; align-items: center; background: #2a2a3c; padding: 1rem; border-radius: 0.75rem; border: 1px solid #3b3b54; margin-bottom: 1rem; }
+    .file-info { display: flex; align-items: center; gap: 0.75rem; overflow: hidden; }
+    .file-icon { color: #f43f5e; font-size: 1.5rem; }
+    .file-name { color: white; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .remove-file-btn { background: none; border: none; color: #ef4444; cursor: pointer; font-size: 1.2rem; }
+    .helper-text { color: #94a3b8; font-size: 0.9rem; line-height: 1.4; margin-bottom: 1.5rem; text-align: center; }
+
     .task-form { display: flex; flex-direction: column; gap: 1.25rem; }
     .form-row { display: flex; gap: 10px; width: 100%; }
     .form-group { display: flex; flex-direction: column; gap: 5px; flex: 1; }
     .form-group label { color: var(--text-gray); font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
-    .form-group input, .form-group select { background: #1e1f2e; border: 1px solid var(--border-color); color: white; padding: 0.75rem; border-radius: 0.5rem; font-size: 16px; width: 100%; outline: none; }
-    
+    .form-group input, .form-group textarea, .form-group select { background: #1e1f2e; border: 1px solid var(--border-color); color: white; padding: 0.75rem; border-radius: 0.5rem; font-size: 16px; width: 100%; outline: none; }
+
     .category-list { display: flex; flex-direction: column; gap: 0.5rem; max-height: 150px; overflow-y: auto; margin-bottom: 0.5rem; }
     .category-item { display: flex; align-items: center; justify-content: space-between; background: #1e1f2e; padding: 0.5rem 0.75rem; border-radius: 0.5rem; border: 1px solid var(--border-color); }
     .category-item label { display: flex; align-items: center; gap: 10px; flex: 1; cursor: pointer; color: white; font-size: 0.85rem; }
@@ -495,12 +646,14 @@
     .color-circle { width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; transition: 0.2s; }
     .color-circle.selected { border-color: white; transform: scale(1.1); }
     .shuffle-btn { background: none; border: none; color: var(--text-gray); font-size: 1.25rem; cursor: pointer; margin-left: auto; }
-    .save-btn { width: 100%; background: var(--accent-purple); color: white; border: none; padding: 1rem; border-radius: 1rem; font-weight: 700; margin-top: 1rem; cursor: pointer; }
+    
+    .save-btn { width: 100%; background: var(--accent-purple); color: white; border: none; padding: 1rem; border-radius: 1rem; font-weight: 700; margin-top: 1rem; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 0.5rem; }
+    .save-btn:disabled { opacity: 0.7; cursor: not-allowed; }
 
     /* Layout Toggle */
     @media (min-width: 769px) {
         .carousel-track { transform: none !important; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; width: 100%; }
-        .carousel-item { flex: none; width: auto; opacity: 1 !important; transform: none !important; filter: none !important; }    
+        .carousel-item { flex: none; width: auto; opacity: 1 !important; transform: none !important; filter: none !important; }
         .mobile-tabs { display: none; }
         .carousel-container { overflow: visible; }
         .form-row { flex-direction: row; }
