@@ -1,9 +1,39 @@
 <script>
 	import { goto } from '$app/navigation';
 
-	function handleLogin() {
-		console.log('Logging in...');
-		goto('/dashboard');
+	let email = '';
+	let password = '';
+	let errorMessage = '';
+	let loading = false;
+
+	async function handleLogin() {
+		errorMessage = '';
+		loading = true;
+
+		try {
+			const response = await fetch('/api/auth/login', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ email, password })
+			});
+
+			const data = await response.json();
+
+			if (!response.ok) {
+				throw new Error(data.error || 'Login failed');
+			}
+
+			// Store tokens (In a production app, use secure cookies for refresh tokens)
+			localStorage.setItem('accessToken', data.accessToken);
+			localStorage.setItem('refreshToken', data.refreshToken);
+			localStorage.setItem('user', JSON.stringify(data.user));
+
+			goto('/dashboard');
+		} catch (e) {
+			errorMessage = e.message;
+		} finally {
+			loading = false;
+		}
 	}
 </script>
 
@@ -27,19 +57,33 @@
 			<p>Enter your credentials to access LifeSyncPro</p>
 		</div>
 
+		{#if errorMessage}
+			<div class="error-banner">
+				<i class="bx bx-error-circle"></i>
+				{errorMessage}
+			</div>
+		{/if}
+
 		<form on:submit|preventDefault={handleLogin} class="form-stack">
 			<div class="input-group">
 				<label for="email">Email Address</label>
-				<input type="email" id="email" value="fahim@lifesync.ai" />
+				<input type="email" id="email" bind:value={email} placeholder="your@email.com" required />
 			</div>
 
 			<div class="input-group">
 				<label for="password">Password</label>
-				<input type="password" id="password" value="password123" />
+				<input type="password" id="password" bind:value={password} placeholder="••••••••" required />
 			</div>
 
-			<button type="submit" class="btn-primary">Enter LifeSyncPro</button>
+			<button type="submit" class="btn-primary" disabled={loading}>
+				{loading ? 'Authenticating...' : 'Enter LifeSyncPro'}
+			</button>
 		</form>
+
+		<div class="card-footer">
+			<p>Don't have an account? <a href="/signup">Sign Up</a></p>
+			<p style="margin-top: 0.5rem;"><a href="/forgot-password" style="font-size: 0.75rem;">Forgot Password?</a></p>
+		</div>
 	</div>
 </div>
 
@@ -54,6 +98,7 @@
 		--text-muted: #9ca3af;
 		--accent-purple: #6366f1;
 		--hover-purple: #4f46e5;
+		--accent-red: #ef4444;
 	}
 
 	/* --- LAYOUT --- */
@@ -100,7 +145,7 @@
 	/* --- CARD STYLES --- */
 	.card {
 		width: 100%;
-		max-width: 28rem; /* approx 450px */
+		max-width: 28rem;
 		background-color: var(--card-bg);
 		padding: 2.5rem;
 		border-radius: 1rem;
@@ -134,6 +179,19 @@
 		margin-top: 0.5rem;
 	}
 
+	.error-banner {
+		background-color: rgba(239, 68, 68, 0.1);
+		border: 1px solid var(--accent-red);
+		color: var(--accent-red);
+		padding: 0.75rem;
+		border-radius: 0.5rem;
+		margin-bottom: 1.5rem;
+		font-size: 0.875rem;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
 	/* --- FORM STYLES --- */
 	.form-stack {
 		display: flex;
@@ -152,7 +210,7 @@
 
 	.input-group input {
 		width: 100%;
-		box-sizing: border-box; /* Important for padding */
+		box-sizing: border-box;
 		background-color: var(--input-bg);
 		border: 1px solid var(--border-color);
 		border-radius: 0.5rem;
@@ -177,11 +235,32 @@
 		border: none;
 		cursor: pointer;
 		font-size: 1rem;
-		transition: background-color 0.2s;
+		transition: all 0.2s;
 		box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.2);
 	}
 
-	.btn-primary:hover {
+	.btn-primary:hover:not(:disabled) {
 		background-color: var(--hover-purple);
 	}
+
+	.btn-primary:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.card-footer {
+		margin-top: 1.5rem;
+		text-align: center;
+		font-size: 0.875rem;
+		color: var(--text-muted);
+	}
+	.card-footer a {
+		color: var(--accent-purple);
+		text-decoration: none;
+		font-weight: 500;
+	}
+	.card-footer a:hover {
+		color: white;
+	}
 </style>
+

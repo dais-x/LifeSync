@@ -1,9 +1,44 @@
 <script>
 	import { goto } from '$app/navigation';
 
-	function handleSignup() {
-		console.log('Signing up...');
-		goto('/signup/details');
+	let name = '';
+	let email = '';
+	let password = '';
+	let errorMessage = '';
+	let successMessage = '';
+	let loading = false;
+
+	async function handleSignup() {
+		errorMessage = '';
+		successMessage = '';
+		loading = true;
+
+		try {
+			const response = await fetch('/api/auth/register', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ email, password })
+			});
+
+			const data = await response.json();
+
+			if (!response.ok) {
+				throw new Error(data.error || 'Registration failed');
+			}
+
+			successMessage = data.message;
+			// After a delay, we can either redirect to login or details
+			// Given the flow, maybe we want them to fill details even if not verified?
+			// But usually, verification is first.
+			// Let's go to details after 2 seconds if we want to follow the UI flow
+			setTimeout(() => {
+				goto('/signup/details');
+			}, 2000);
+		} catch (e) {
+			errorMessage = e.message;
+		} finally {
+			loading = false;
+		}
 	}
 </script>
 
@@ -27,23 +62,39 @@
 			<p>Start syncing your life with your energy.</p>
 		</div>
 
+		{#if errorMessage}
+			<div class="banner error">
+				<i class="bx bx-error-circle"></i>
+				{errorMessage}
+			</div>
+		{/if}
+
+		{#if successMessage}
+			<div class="banner success">
+				<i class="bx bx-check-circle"></i>
+				{successMessage}
+			</div>
+		{/if}
+
 		<form on:submit|preventDefault={handleSignup} class="form-stack">
 			<div class="input-group">
 				<label for="name">Full Name</label>
-				<input type="text" id="name" placeholder="John Doe" />
+				<input type="text" id="name" bind:value={name} placeholder="John Doe" required />
 			</div>
 
 			<div class="input-group">
 				<label for="email">Email Address</label>
-				<input type="email" id="email" placeholder="john@example.com" />
+				<input type="email" id="email" bind:value={email} placeholder="john@example.com" required />
 			</div>
 
 			<div class="input-group">
 				<label for="password">Password</label>
-				<input type="password" id="password" placeholder="••••••••" />
+				<input type="password" id="password" bind:value={password} placeholder="••••••••" required />
 			</div>
 
-			<button type="submit" class="btn-primary">Get Started Free</button>
+			<button type="submit" class="btn-primary" disabled={loading}>
+				{loading ? 'Creating Account...' : 'Get Started Free'}
+			</button>
 		</form>
 
 		<div class="card-footer">
@@ -53,7 +104,7 @@
 </div>
 
 <style>
-	/* --- CSS VARIABLES (Same as Login) --- */
+	/* --- CSS VARIABLES --- */
 	:root {
 		--bg-dark: #0b0c15;
 		--card-bg: #151621;
@@ -63,6 +114,8 @@
 		--text-muted: #9ca3af;
 		--accent-purple: #6366f1;
 		--hover-purple: #4f46e5;
+		--accent-red: #ef4444;
+		--accent-green: #10b981;
 	}
 
 	/* --- LAYOUT --- */
@@ -88,7 +141,6 @@
 		}
 		to {
 			opacity: 1;
-			transform: translateY(0);
 		}
 	}
 
@@ -139,6 +191,27 @@
 		margin-top: 0.5rem;
 	}
 
+	.banner {
+		padding: 0.75rem;
+		border-radius: 0.5rem;
+		margin-bottom: 1.5rem;
+		font-size: 0.875rem;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		border: 1px solid transparent;
+	}
+	.banner.error {
+		background-color: rgba(239, 68, 68, 0.1);
+		border-color: var(--accent-red);
+		color: var(--accent-red);
+	}
+	.banner.success {
+		background-color: rgba(16, 185, 129, 0.1);
+		border-color: var(--accent-green);
+		color: var(--accent-green);
+	}
+
 	/* --- FORM --- */
 	.form-stack {
 		display: flex;
@@ -180,11 +253,15 @@
 		border: none;
 		cursor: pointer;
 		font-size: 1rem;
-		transition: background-color 0.2s;
+		transition: all 0.2s;
 		box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.2);
 	}
-	.btn-primary:hover {
+	.btn-primary:hover:not(:disabled) {
 		background-color: var(--hover-purple);
+	}
+	.btn-primary:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
 	}
 
 	/* --- FOOTER --- */
@@ -203,3 +280,4 @@
 		color: white;
 	}
 </style>
+
