@@ -1,10 +1,10 @@
 <script>
 	import { goto } from '$app/navigation';
 
-	let email = '';
-	let password = '';
-	let errorMessage = '';
-	let loading = false;
+	let email = $state('');
+	let password = $state('');
+	let errorMessage = $state('');
+	let loading = $state(false);
 
 	async function handleLogin() {
 		errorMessage = '';
@@ -23,7 +23,7 @@
 				throw new Error(data.error || 'Login failed');
 			}
 
-			// Store tokens (In a production app, use secure cookies for refresh tokens)
+			// Store tokens
 			localStorage.setItem('accessToken', data.accessToken);
 			localStorage.setItem('refreshToken', data.refreshToken);
 			localStorage.setItem('user', JSON.stringify(data.user));
@@ -118,14 +118,8 @@
 		animation: fadeIn 0.4s ease-out forwards;
 	}
 	@keyframes fadeIn {
-		from {
-			opacity: 0;
-			transform: translateY(10px);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
+		from { opacity: 0; transform: translateY(10px); }
+		to { opacity: 1; transform: translateY(0); }
 	}
 
 	/* --- BACK BUTTON --- */
@@ -138,9 +132,7 @@
 		text-decoration: none;
 		transition: color 0.2s;
 	}
-	.back-btn:hover {
-		color: white;
-	}
+	.back-btn:hover { color: white; }
 
 	/* --- CARD STYLES --- */
 	.card {
@@ -154,30 +146,10 @@
 		margin: 1rem;
 	}
 
-	.card-header {
-		text-align: center;
-		margin-bottom: 2rem;
-	}
-
-	.accent-icon {
-		font-size: 2.5rem;
-		color: var(--accent-purple);
-		margin-bottom: 1rem;
-		display: inline-block;
-	}
-
-	.card-header h2 {
-		font-size: 1.5rem;
-		font-weight: 700;
-		margin: 0;
-		color: white;
-	}
-
-	.card-header p {
-		font-size: 0.875rem;
-		color: var(--text-muted);
-		margin-top: 0.5rem;
-	}
+	.card-header { text-align: center; margin-bottom: 2rem; }
+	.accent-icon { font-size: 2.5rem; color: var(--accent-purple); margin-bottom: 1rem; display: inline-block; }
+	.card-header h2 { font-size: 1.5rem; font-weight: 700; margin: 0; color: white; }
+	.card-header p { font-size: 0.875rem; color: var(--text-muted); margin-top: 0.5rem; }
 
 	.error-banner {
 		background-color: rgba(239, 68, 68, 0.1);
@@ -193,74 +165,16 @@
 	}
 
 	/* --- FORM STYLES --- */
-	.form-stack {
-		display: flex;
-		flex-direction: column;
-		gap: 1.25rem;
-	}
+	.form-stack { display: flex; flex-direction: column; gap: 1.25rem; }
+	.input-group label { display: block; font-size: 0.75rem; font-weight: 500; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.5rem; }
+	.input-group input { width: 100%; box-sizing: border-box; background-color: var(--input-bg); border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 0.75rem 1rem; color: white; font-size: 1rem; outline: none; transition: border-color 0.2s; }
+	.input-group input:focus { border-color: var(--accent-purple); }
 
-	.input-group label {
-		display: block;
-		font-size: 0.75rem;
-		font-weight: 500;
-		color: var(--text-muted);
-		text-transform: uppercase;
-		margin-bottom: 0.5rem;
-	}
+	.btn-primary { width: 100%; background-color: var(--accent-purple); color: white; font-weight: 700; padding: 0.75rem; border-radius: 0.75rem; border: none; cursor: pointer; font-size: 1rem; transition: all 0.2s; box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.2); }
+	.btn-primary:hover:not(:disabled) { background-color: var(--hover-purple); }
+	.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
-	.input-group input {
-		width: 100%;
-		box-sizing: border-box;
-		background-color: var(--input-bg);
-		border: 1px solid var(--border-color);
-		border-radius: 0.5rem;
-		padding: 0.75rem 1rem;
-		color: white;
-		font-size: 1rem;
-		outline: none;
-		transition: border-color 0.2s;
-	}
-
-	.input-group input:focus {
-		border-color: var(--accent-purple);
-	}
-
-	.btn-primary {
-		width: 100%;
-		background-color: var(--accent-purple);
-		color: white;
-		font-weight: 700;
-		padding: 0.75rem;
-		border-radius: 0.75rem;
-		border: none;
-		cursor: pointer;
-		font-size: 1rem;
-		transition: all 0.2s;
-		box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.2);
-	}
-
-	.btn-primary:hover:not(:disabled) {
-		background-color: var(--hover-purple);
-	}
-
-	.btn-primary:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-
-	.card-footer {
-		margin-top: 1.5rem;
-		text-align: center;
-		font-size: 0.875rem;
-		color: var(--text-muted);
-	}
-	.card-footer a {
-		color: var(--accent-purple);
-		text-decoration: none;
-		font-weight: 500;
-	}
-	.card-footer a:hover {
-		color: white;
-	}
+	.card-footer { margin-top: 1.5rem; text-align: center; font-size: 0.875rem; color: var(--text-muted); }
+	.card-footer a { color: var(--accent-purple); text-decoration: none; font-weight: 500; }
+	.card-footer a:hover { color: white; }
 </style>
-

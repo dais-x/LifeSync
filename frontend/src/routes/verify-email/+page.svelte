@@ -4,20 +4,21 @@
 	import { goto } from '$app/navigation';
 
 	let email = $page.url.searchParams.get('email') || '';
-	let otp = ['', '', '', '', '', ''];
-	let status = 'idle'; // idle, loading, success, error
-	let errorMessage = '';
-	let successMessage = '';
-	let resendTimer = 0;
+	let otp = $state(['', '', '', '', '', '']);
+	let status = $state('idle'); // idle, loading, success, error
+	let errorMessage = $state('');
+	let successMessage = $state('');
+	let resendTimer = $state(0);
 
 	let inputs = [];
 
 	function handleInput(e, index) {
 		const value = e.target.value;
+		otp[index] = value.slice(-1);
+		
 		if (value && index < 5) {
 			inputs[index + 1].focus();
 		}
-		otp[index] = value.slice(-1);
 	}
 
 	function handleKeydown(e, index) {
@@ -46,10 +47,15 @@
 				throw new Error(data.error || 'Verification failed');
 			}
 
+			// Store tokens for automatic login
+			localStorage.setItem('accessToken', data.accessToken);
+			localStorage.setItem('refreshToken', data.refreshToken);
+			localStorage.setItem('user', JSON.stringify(data.user));
+
 			status = 'success';
 			setTimeout(() => {
-				goto('/login');
-			}, 2000);
+				goto('/signup/details'); // Proceed to details after successful verification
+			}, 1500);
 		} catch (e) {
 			status = 'error';
 			errorMessage = e.message;
@@ -111,7 +117,7 @@
 			{#if status === 'success'}
 				<div class="result success">
 					<i class="bx bx-check-circle"></i>
-					<p>Email verified successfully! Redirecting to login...</p>
+					<p>Email verified successfully! Let's complete your profile...</p>
 				</div>
 			{:else}
 				{#if errorMessage}
@@ -135,6 +141,7 @@
 								inputmode="numeric"
 								maxlength="1"
 								bind:this={inputs[i]}
+								value={otp[i]}
 								on:input={(e) => handleInput(e, i)}
 								on:keydown={(e) => handleKeydown(e, i)}
 								required
@@ -253,4 +260,3 @@
 
 	.result i { font-size: 3rem; color: var(--accent-green); margin-bottom: 1rem; display: block; }
 </style>
-
