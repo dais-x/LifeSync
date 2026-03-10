@@ -3,12 +3,12 @@
     import { slide, fade } from 'svelte/transition';
     import { spring } from 'svelte/motion';
     import Notification from '$lib/Notification.svelte';
+    import { currentUser } from '$lib/stores'; // NEW: Import the global store
 
     // --- API CONFIGURATION ---
     const SEND_URL = 'https://fahim-n8n.laddu.cc/webhook/sync-task';
     const GET_URL = 'https://fahim-n8n.laddu.cc/webhook/get-tasks';
     const MANAGE_URL = 'https://fahim-n8n.laddu.cc/webhook/manage-task';
-    const CURRENT_USER_ID = "user_456";
 
     // --- STATE ---
     let showAddTaskPopup = $state(false);
@@ -103,8 +103,10 @@
 
     // --- API & LOGIC ---
     async function fetchTasks() {
+        if (!$currentUser || !$currentUser.id) return; // Guard clause
+
         try {
-            const res = await fetch(GET_URL);
+            const res = await fetch(`${GET_URL}?userId=${$currentUser.id}`);
             if (res.ok) {
                 const incoming = await res.json();
                 let allTasks = incoming.data || incoming || [];
@@ -131,7 +133,8 @@
         const combinedDeadline = newTaskDeadline ? `${newTaskDeadline} ${newTaskTime}` : '';
         const catObj = categories.find(c => c.name === selectedCategory);
         const payload = {
-            user_id: CURRENT_USER_ID, title: newTaskName, status: "pending",
+            user_id: $currentUser.id, // DYNAMIC USER ID
+            title: newTaskName, status: "pending",
             priority: newTaskPriority, category: selectedCategory, deadline: combinedDeadline,
             timestamp: new Date().toISOString(), color: catObj?.color || '#6366f1'
         };
@@ -170,7 +173,7 @@
             const payload = {
                 fileName: selectedFile.name,
                 fileData: base64Data,
-                user_id: CURRENT_USER_ID,
+                user_id: $currentUser.id, // DYNAMIC USER ID
                 category: selectedCategory,
                 color: catObj?.color || '#6366f1',
                 instruction: aiInstruction, // NEW: Pass the instruction to n8n
@@ -277,7 +280,12 @@
 
     function getCatColor(catName) { return categories.find(c => c.name === catName)?.color || '#6366f1'; }
 
-    onMount(fetchTasks);
+    onMount(() => {
+        // We only fetch tasks if they are logged in!
+        if ($currentUser) {
+            fetchTasks();
+        }
+    });
 </script>
 
 <div class="scroll-area fade-in">

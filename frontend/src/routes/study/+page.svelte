@@ -1,5 +1,6 @@
 <script>
     import { onMount } from 'svelte';
+    import { currentUser } from '$lib/stores'; // NEW: Import currentUser
 
     let showPopup = $state(false);
     let isUploading = $state(false);
@@ -32,9 +33,12 @@
     // DATA FETCHING
     // ==========================================
     async function loadStudyMaterials(showSpinner = true) {
+        if (!$currentUser || !$currentUser.id) return; // NEW: Guard clause so it only fetches if logged in
+
         if (showSpinner) isLoading = true;
         try {
-            const getStudyUrl = 'https://fahim-n8n.laddu.cc/webhook/get-study';
+            // NEW: Added userId parameter to the webhook URL
+            const getStudyUrl = `https://fahim-n8n.laddu.cc/webhook/get-study?userId=${$currentUser.id}`;
             const response = await fetch(getStudyUrl);
 
             if (response.ok) {
@@ -315,6 +319,7 @@
                     title: studyTitle || selectedFile.name,
                     fileName: selectedFile.name,
                     fileData: base64Data,
+                    user_id: $currentUser.id, // NEW: Pass user ID to AI pipeline
                     timestamp: new Date().toISOString()
                 };
 

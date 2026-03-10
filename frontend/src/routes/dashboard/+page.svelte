@@ -2,6 +2,7 @@
     import { onMount, onDestroy } from 'svelte';
     import { slide } from 'svelte/transition';
     import Notification from '$lib/Notification.svelte';
+    import { currentUser } from '$lib/stores'; // NEW: Import the global store
 
     // --- API CONFIGURATION ---
     const GET_URL = 'https://fahim-n8n.laddu.cc/webhook/get-tasks';
@@ -31,8 +32,11 @@
 
     // --- MAIN SYNC FUNCTION ---
     async function refreshDashboard() {
+        if (!$currentUser || !$currentUser.id) return; // NEW: Guard clause prevents polling when logged out
+
         try {
-            const res = await fetch(GET_URL);
+            // NEW: Send userId dynamically
+            const res = await fetch(`${GET_URL}?userId=${$currentUser.id}`);
             if (res.ok) {
                 const incoming = await res.json();
                 let tasks = [];
@@ -61,7 +65,7 @@
     // --- TASK ACTIONS ---
     async function completeTask(task) {
         const taskId = task.id || task._id;
-        
+
         // 1. Optimistic UI Update
         allTasks = allTasks.map(t => {
             const tId = t.id || t._id;
@@ -80,9 +84,9 @@
                 body: JSON.stringify({
                     action: 'update',
                     id: taskId,
-                    updateFields: { 
-                        status: 'completed', 
-                        completionTime: new Date().toISOString() 
+                    updateFields: {
+                        status: 'completed',
+                        completionTime: new Date().toISOString()
                     }
                 })
             });
@@ -102,7 +106,7 @@
 
     function processWidgets(tasks) {
         const active = tasks.filter(t => t.status !== 'completed');
-        
+
         // Sorted by TIME (Deadline first, then creation time)
         priorityTasks = active
             .sort((a, b) => {
@@ -130,7 +134,7 @@
 
         validTasks.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
-        notifications = validTasks.slice(0, 15).map(t => { 
+        notifications = validTasks.slice(0, 15).map(t => {
             const isEmail = t.category?.toLowerCase() === 'email' || t.category?.toLowerCase() === 'inbox';
             const diffMins = Math.round((new Date() - new Date(t.timestamp)) / 60000);
             let timeStr = diffMins < 1 ? 'Just now' : `${diffMins}m ago`;
@@ -304,7 +308,7 @@
                     <h3>Habit Breakdown</h3>
                     <i class="bx bx-pie-chart-alt-2" style="color: var(--accent-purple)"></i>
                 </div>
-                
+
                 {#if categoryStats.length === 0}
                     <div style="padding:1rem; color:#9ca3af; text-align:center; font-style:italic;">No data yet</div>
                 {:else}
@@ -312,7 +316,7 @@
                         <div class="donut" style="background: {donutGradient}">
                             <div class="hole"></div>
                         </div>
-                        
+
                         <div class="legend">
                             {#each categoryStats.slice(0, 4) as stat}
                                 <div class="legend-item">
@@ -352,7 +356,7 @@
                 <h3><i class="bx bx-bell"></i> Recent Alerts</h3>
                 <button class="close-btn" on:click={() => { showNotifModal = false; selectedNotifId = null; }}><i class="bx bx-x"></i></button>
             </div>
-            
+
             <div class="modal-body notif-modal-body">
                 <div class="notif-accordion">
                     {#each notifications as notif}
@@ -365,7 +369,7 @@
                                 </div>
                                 <i class="bx bx-chevron-down chevron"></i>
                             </button>
-                            
+
                             {#if selectedNotifId === notif.id}
                                 <div class="notif-details" transition:slide={{ duration: 250 }}>
                                     <div class="details-inner">
@@ -421,7 +425,7 @@
                         <span class="total-lbl">Total Tasks</span>
                     </div>
                 </div>
-                
+
                 <div class="full-legend">
                     {#each categoryStats as stat}
                         <div class="legend-row">
@@ -516,17 +520,17 @@
 
     /* TASKS WIDGET (DYNAMIC SIZE) */
     .tasks-widget { min-height: auto; } /* Removed fixed 400px */
-    .task-item { 
+    .task-item {
         display: flex; align-items: center; padding: 0.875rem; border-radius: 0.5rem; margin-bottom: 0.5rem;
         background: rgba(255,255,255,0.02); border: 1px solid transparent; transition: all 0.2s;
     }
     .task-item:hover { background: rgba(255,255,255,0.05); border-color: var(--border-color); }
     .task-text { flex: 1; font-size: 0.875rem; color: #d1d5db; margin: 0 0.75rem; }
-    
+
     .complete-btn { background: none; border: none; padding: 0; cursor: pointer; display: flex; align-items: center; }
     .circle { width: 1.25rem; height: 1.25rem; border: 2px solid #4b5563; border-radius: 50%; transition: all 0.2s; }
     .complete-btn:hover .circle { border-color: var(--accent-green); background: rgba(34, 197, 94, 0.1); }
-    
+
     .task-meta-info { display: flex; align-items: center; gap: 0.75rem; }
     .time-tag { font-size: 0.7rem; color: var(--text-gray); display: flex; align-items: center; gap: 0.25rem; }
     .tag { font-size: 0.625rem; padding: 0.15rem 0.5rem; border-radius: 0.25rem; text-transform: capitalize; }
@@ -542,7 +546,7 @@
     .donut .hole { position: absolute; background: var(--card-bg); border-radius: 50%; }
     .donut:not(.large) .hole { top: 12px; left: 12px; right: 12px; bottom: 12px; }
     .donut.large .hole { top: 30px; left: 30px; right: 30px; bottom: 30px; }
-    
+
     .legend { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.75rem; }
     .legend-item { display: flex; align-items: center; gap: 0.4rem; color: var(--text-gray); }
     .dot { width: 8px; height: 8px; border-radius: 2px; }
@@ -570,7 +574,7 @@
     .modal-header h3 { margin: 0; color: white; display: flex; align-items: center; gap: 0.75rem; font-size: 1.1rem; }
     .close-btn { background: none; border: none; color: var(--text-gray); cursor: pointer; font-size: 1.5rem; transition: color 0.2s; }
     .close-btn:hover { color: white; }
-    
+
     .modal-body { flex: 1; overflow-y: auto; padding: 1.5rem; }
 
     /* --- NOTIF ACCORDION --- */
@@ -588,13 +592,13 @@
     .notif-group .chevron { color: var(--text-gray); transition: transform 0.3s; }
     .notif-group.expanded .chevron { transform: rotate(180deg); color: var(--accent-purple); }
     .notif-meta { font-size: 0.7rem; color: var(--text-gray); margin: 0.25rem 0 0; }
-    
+
     .notif-details { border-top: 1px solid rgba(255, 255, 255, 0.05); }
     .details-inner { padding: 1.25rem; display: flex; flex-direction: column; gap: 1.25rem; }
     .detail-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
     .detail-col label { display: block; font-size: 0.65rem; text-transform: uppercase; color: var(--text-gray); margin-bottom: 0.4rem; letter-spacing: 0.05em; }
     .detail-col p { margin: 0; color: white; font-size: 0.9rem; font-weight: 500; }
-    
+
     .empty-notif { text-align: center; padding: 4rem 2rem; color: var(--text-gray); }
     .empty-notif i { font-size: 3rem; opacity: 0.2; margin-bottom: 1rem; display: block; }
 

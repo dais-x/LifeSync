@@ -1,7 +1,7 @@
 <script>
     import { Camera, CameraResultType } from '@capacitor/camera';
     import { CameraPreview } from '@capacitor-community/camera-preview';
-    import { userFormData } from '$lib/stores';
+    import { userFormData, currentUser } from '$lib/stores'; // NEW: Added currentUser import
     import { onMount, onDestroy } from 'svelte';
 
     let showPopup = $state(false);
@@ -9,7 +9,7 @@
     let capturedImage = $state(null);
     let editingMedicine = $state(null);
     let cameraActive = $state(false);
-    let isAnalyzing = $state(false); 
+    let isAnalyzing = $state(false);
 
     // State array for medicines
     let medicines = $state([]);
@@ -30,9 +30,12 @@
     // DATA FETCHING (Single Source of Truth)
     // ==========================================
     async function loadMedicines(showSpinner = true) {
+        if (!$currentUser || !$currentUser.id) return; // NEW: Guard clause so it only fetches if logged in
+
         if (showSpinner) isLoading = true;
         try {
-            const getMedsUrl = 'https://fahim-n8n.laddu.cc/webhook/get-meds';
+            // NEW: Added userId parameter to the webhook URL
+            const getMedsUrl = `https://fahim-n8n.laddu.cc/webhook/get-meds?userId=${$currentUser.id}`;
             const response = await fetch(getMedsUrl);
 
             if (response.ok) {
@@ -180,7 +183,7 @@
         const reader = new FileReader();
         reader.onload = (e) => {
             capturedImage = e.target.result;
-            entryMode = 'photo'; 
+            entryMode = 'photo';
         };
         reader.readAsDataURL(file);
     }
@@ -201,7 +204,7 @@
     async function deleteMedicine(med) {
         if (confirm(`Are you sure you want to delete ${med.nickname || med.title}?`)) {
             const medId = med._id || med.id;
-            
+
             if (!medId) {
                 alert("This medicine doesn't have a valid database ID. It will be removed locally.");
                 medicines = medicines.filter(m => m !== med);
@@ -210,7 +213,7 @@
 
             // Optimistic UI update - delete instantly from screen
             medicines = medicines.filter(m => (m._id || m.id) !== medId);
-            
+
             // Background sync
             fetch('https://fahim-n8n.laddu.cc/webhook/manage-meds', {
                 method: 'POST',
@@ -293,15 +296,18 @@
 
     async function handleSubmit(event) {
         event.preventDefault();
-        
+
         // CRITICAL FIX: Deep clone newMed immediately.
         // This detaches it from the Svelte UI so when closePopup() clears the form,
         // it doesn't accidentally wipe the newly added card blank on your screen!
         const medData = JSON.parse(JSON.stringify(newMed));
         
+        // NEW: Tag the medicine with the current user's ID
+        medData.user_id = $currentUser.id;
+
         const currentMode = entryMode;
         const editId = editingMedicine ? (editingMedicine._id || editingMedicine.id) : null;
-        
+
         // Do NOT set isLoading = true here. We want a perfectly smooth optimistic UI update!
 
         try {
@@ -314,8 +320,8 @@
                 // Optimistic UI Update: Instantly change the fields on screen!
                 const index = medicines.findIndex(m => (m._id || m.id) === editId);
                 if (index !== -1) {
-                    medicines[index] = { 
-                        ...medicines[index], 
+                    medicines[index] = {
+                        ...medicines[index],
                         ...medData,
                         nickname: medData.nickname || medData.name || "Unnamed Med",
                         title: medData.nickname || medData.name || "Unnamed Med",
@@ -375,7 +381,8 @@
             const webhookUrl = 'https://fahim-n8n.laddu.cc/webhook/upload-medicine';
             const payload = {
                 image: capturedImage,
-                dosage: newMed.dosageText
+                dosage: newMed.dosageText,
+                user_id: $currentUser.id // NEW: Send user ID for AI extraction
             };
 
             const response = await fetch(webhookUrl, {
@@ -386,7 +393,7 @@
 
             if (response.ok) {
                 const aiFormattedData = await response.json();
-                
+
                 // Add the AI response instantly
                 medicines = [...medicines, aiFormattedData];
 
@@ -445,10 +452,10 @@
                             <button class="icon-btn delete-btn" on:click={() => deleteMedicine(med)} title="Delete"><i class='bx bx-trash'></i></button>
                         </div>
                     </div>
-                    
+
                     <div class="card-middle">
                         <div class="official-name">{med.name || med.medicine_name || 'Unknown Official Name'}</div>
-                        
+
                         <div class="badges">
                             {#if med.expiry}
                                 <span class="badge expiry-badge"><i class='bx bx-calendar-x'></i> Exp: {formatDate(med.expiry)}</span>
@@ -464,7 +471,7 @@
                             <div class="dosage-pill"><i class='bx bx-time-five'></i> {(Array.isArray(med.directions) ? med.directions : ['0','0','0','0']).join('-')}</div>
                             <div class="dosage-pill"><i class='bx bx-restaurant'></i> {med.food || 'any'}</div>
                         </div>
-                        
+
                         <div class="stock-info" class:low-stock={(med.currentStock || 0) < 5}>
                             <i class='bx bx-package'></i> {med.currentStock || 0} left
                             {#if (med.currentStock || 0) < 5 && med.currentStock !== undefined}
@@ -634,7 +641,7 @@
         grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
         gap: 1.5rem;
     }
-    
+
     /* --- NEW SPACIOUS CARD UI --- */
     .card {
         background: #1e1e2e;

@@ -1,4 +1,24 @@
 import { writable } from 'svelte/store';
+import { browser } from '$app/environment';
+
+// --- AUTHENTICATION STORE ---
+// Check local storage so they stay logged in if they refresh the page
+const storedUser = browser ? JSON.parse(localStorage.getItem('user') || 'null') : null;
+
+export const currentUser = writable(storedUser);
+
+// Whenever currentUser changes (like logging in or out), update local storage automatically
+if (browser) {
+    currentUser.subscribe(value => {
+        if (value) {
+            localStorage.setItem('user', JSON.stringify(value));
+        } else {
+            localStorage.removeItem('user');
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
+        }
+    });
+}
 
 // Initialize with default form data structure
 export const userFormData = writable({
@@ -31,7 +51,7 @@ export const userFormData = writable({
         thyroid: false,
         other: ''
     },
-    health_sync_url: 'https://your-n8n-webhook-url.com/health-sync', // Placeholder for n8n webhook
+    health_sync_url: 'https://fahim-n8n.laddu.cc/webhook/health-sync',
     digital_wellbeing: [],
     mess_factor: 5,
     smart_sync: false,

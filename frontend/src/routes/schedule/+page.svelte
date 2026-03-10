@@ -1,19 +1,23 @@
 <script>
     import { onMount } from 'svelte';
+    import { currentUser } from '$lib/stores'; // NEW: Import user store
 
     const GET_URL = 'https://fahim-n8n.laddu.cc/webhook/get-tasks';
-    
+
     let view = $state('day'); // 'day' or 'calendar'
     let selectedDate = $state(new Date());
     let currentMonth = $state(new Date()); // Used for calendar navigation
-    
+
     let allTasks = $state([]);
     let isLoading = $state(true);
 
     async function fetchSchedule() {
+        if (!$currentUser || !$currentUser.id) return; // NEW: Guard clause
+
         isLoading = true;
         try {
-            const res = await fetch(GET_URL);
+            // NEW: Send userId dynamically
+            const res = await fetch(`${GET_URL}?userId=${$currentUser.id}`);
             if (!res.ok) {
                 console.error("Failed to fetch schedule data, status:", res.status);
                 return;
@@ -21,7 +25,7 @@
 
             const incoming = await res.json();
             let rawTasks = [];
-            
+
             if (incoming.data && Array.isArray(incoming.data)) {
                 rawTasks = incoming.data.filter(t => t.isDeleted !== true);
             } else if (Array.isArray(incoming)) {
@@ -57,7 +61,7 @@
         if (!date) return '';
         return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
     }
-    
+
     function getCategoryColor(category) {
         const lowerCategory = (category || '').toLowerCase();
         if (lowerCategory.includes('work')) return 'blue';
@@ -88,16 +92,16 @@
 
     // Calendar logic
     const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    
+
     let calendarDays = $derived.by(() => {
         const year = currentMonth.getFullYear();
         const month = currentMonth.getMonth();
-        
+
         const firstDayOfMonth = new Date(year, month, 1).getDay();
         const daysInMonth = new Date(year, month + 1, 0).getDate();
-        
+
         const days = [];
-        
+
         // Padding for previous month
         const prevMonthLastDay = new Date(year, month, 0).getDate();
         for (let i = firstDayOfMonth - 1; i >= 0; i--) {
@@ -108,7 +112,7 @@
                 isCurrentMonth: false
             });
         }
-        
+
         // Days in current month
         for (let i = 1; i <= daysInMonth; i++) {
             days.push({
@@ -118,7 +122,7 @@
                 isCurrentMonth: true
             });
         }
-        
+
         // Padding for next month
         const remaining = 42 - days.length; // 6 rows of 7
         for (let i = 1; i <= remaining; i++) {
@@ -129,7 +133,7 @@
                 isCurrentMonth: false
             });
         }
-        
+
         return days;
     });
 
@@ -213,8 +217,8 @@
                 {/each}
                 {#each calendarDays as dayObj}
                     {@const dayTasks = getDayTasks(dayObj)}
-                    <button 
-                        class="day-cell" 
+                    <button
+                        class="day-cell"
                         class:not-current={!dayObj.isCurrentMonth}
                         class:selected={isSelected(dayObj)}
                         class:today={isToday(dayObj)}
@@ -259,10 +263,10 @@
         align-items: center;
         margin-bottom: 2rem;
     }
-	.page-title {
-		color: white;
-		margin: 0;
-	}
+    .page-title {
+        color: white;
+        margin: 0;
+    }
     .view-toggle {
         display: flex;
         background: var(--card-bg);
@@ -287,48 +291,48 @@
     }
 
     /* Timeline Styles */
-	.timeline-container {
-		position: relative;
-		padding-left: 3rem;
+    .timeline-container {
+        position: relative;
+        padding-left: 3rem;
         min-height: 50vh;
-	}
-	.timeline-line {
-		position: absolute;
-		left: 3.5rem;
-		top: 0;
-		bottom: 0;
-		width: 1px;
-		background: var(--border-color);
-		z-index: 0;
-	}
-	.time-slot {
-		display: flex;
-		margin-bottom: 2rem;
-		position: relative;
-		z-index: 1;
-	}
-	.time-label {
-		width: 3rem;
-		font-size: 0.8rem;
-		color: var(--text-gray);
-		margin-top: -0.2rem;
-	}
-	.event-card {
-		flex: 1;
-		margin-left: 2rem;
-		padding: 0.75rem 1rem;
-		border-left: 3px solid;
-		border-radius: 0.25rem;
-	}
-	.event-card.purple { border-color: var(--accent-purple); background: rgba(99, 102, 241, 0.1); }
-	.event-card.blue { border-color: var(--accent-blue); background: rgba(59, 130, 246, 0.1); }
-	.event-card.green { border-color: var(--accent-green); background: rgba(34, 197, 94, 0.1); }
+    }
+    .timeline-line {
+        position: absolute;
+        left: 3.5rem;
+        top: 0;
+        bottom: 0;
+        width: 1px;
+        background: var(--border-color);
+        z-index: 0;
+    }
+    .time-slot {
+        display: flex;
+        margin-bottom: 2rem;
+        position: relative;
+        z-index: 1;
+    }
+    .time-label {
+        width: 3rem;
+        font-size: 0.8rem;
+        color: var(--text-gray);
+        margin-top: -0.2rem;
+    }
+    .event-card {
+        flex: 1;
+        margin-left: 2rem;
+        padding: 0.75rem 1rem;
+        border-left: 3px solid;
+        border-radius: 0.25rem;
+    }
+    .event-card.purple { border-color: var(--accent-purple); background: rgba(99, 102, 241, 0.1); }
+    .event-card.blue { border-color: var(--accent-blue); background: rgba(59, 130, 246, 0.1); }
+    .event-card.green { border-color: var(--accent-green); background: rgba(34, 197, 94, 0.1); }
     .event-card.orange { border-color: var(--accent-orange); background: rgba(251, 146, 60, 0.1); }
     .event-card.grey { border-color: var(--text-gray); background: rgba(156, 163, 175, 0.1); }
 
-	.event-title { color: white; font-weight: 600; font-size: 0.9rem; }
-	.event-desc { color: var(--text-gray); font-size: 0.8rem; }
-    
+    .event-title { color: white; font-weight: 600; font-size: 0.9rem; }
+    .event-desc { color: var(--text-gray); font-size: 0.8rem; }
+
     .empty-state, .loading-state {
         text-align: center;
         color: var(--text-gray);
@@ -424,7 +428,7 @@
     .day-cell.today.selected {
         color: white;
     }
-    
+
     .task-indicators {
         position: absolute;
         bottom: 0.3rem;
@@ -461,11 +465,11 @@
         border-left: 3px solid;
     }
     .mini-event-card.purple { border-color: var(--accent-purple); background: rgba(99, 102, 241, 0.05); }
-	.mini-event-card.blue { border-color: var(--accent-blue); background: rgba(59, 130, 246, 0.05); }
-	.mini-event-card.green { border-color: var(--accent-green); background: rgba(34, 197, 94, 0.05); }
+    .mini-event-card.blue { border-color: var(--accent-blue); background: rgba(59, 130, 246, 0.05); }
+    .mini-event-card.green { border-color: var(--accent-green); background: rgba(34, 197, 94, 0.05); }
     .mini-event-card.orange { border-color: var(--accent-orange); background: rgba(251, 146, 60, 0.05); }
     .mini-event-card.grey { border-color: var(--text-gray); background: rgba(156, 163, 175, 0.05); }
-    
+
     .mini-time {
         font-size: 0.75rem;
         color: var(--text-gray);
@@ -493,11 +497,11 @@
         font-style: italic;
     }
 
-	.fade-in {
-		animation: fadeIn 0.4s ease-out forwards;
-	}
-	@keyframes fadeIn {
-		from { opacity: 0; transform: translateY(10px); }
-		to { opacity: 1; transform: translateY(0); }
-	}
+    .fade-in {
+        animation: fadeIn 0.4s ease-out forwards;
+    }
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
 </style>
