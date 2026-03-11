@@ -628,3 +628,5 @@
         .detail-row { grid-template-columns: 1fr; }
     }
 </style>
+
+<!-- Force Deploy -->
