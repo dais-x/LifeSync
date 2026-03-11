@@ -55,11 +55,13 @@ export async function POST({ request }) {
 	await sendEmail({
 		to: email,
 		subject: 'Verify your LifeSync account',
+		templateData: {
+			name: user.name || 'User',
+			otp_code: otp
+		},
 		html: `
 			<h1>Verify your account</h1>
-			<p>Your new verification code is:</p>
-			<h2 style="font-size: 2rem; letter-spacing: 5px;">${otp}</h2>
-			<p>This code expires in 5 minutes.</p>
+			<p>Your new verification code is: ${otp}</p>
 		`
 	});
 

@@ -5,7 +5,7 @@ import { generateOTP, hashToken } from '$lib/server/auth/token.js';
 import { sendEmail } from '$lib/server/email.js';
 
 export async function POST({ request }) {
-	const { email, password } = await request.json();
+	const { name, email, password } = await request.json();
 
 	if (!email || !password) {
 		return json({ error: 'Email and password are required' }, { status: 400 });
@@ -20,6 +20,7 @@ export async function POST({ request }) {
 
 	const passwordHash = await hashPassword(password);
 	const user = {
+		name: name || 'User',
 		email,
 		passwordHash,
 		verified: false,
@@ -47,11 +48,13 @@ export async function POST({ request }) {
 	await sendEmail({
 		to: email,
 		subject: 'Verify your LifeSync account',
+		templateData: {
+			name: name || 'User',
+			otp_code: otp
+		},
 		html: `
 			<h1>Verify your account</h1>
-			<p>Your verification code is:</p>
-			<h2 style="font-size: 2rem; letter-spacing: 5px;">${otp}</h2>
-			<p>This code expires in 5 minutes.</p>
+			<p>Your verification code is: ${otp}</p>
 		`
 	});
 

@@ -5,7 +5,11 @@ if (!MONGODB_URI) {
 	throw new Error('Please add MONGODB_URI to .env');
 }
 
-const client = new MongoClient(MONGODB_URI);
+const client = new MongoClient(MONGODB_URI, {
+	tls: true,
+	connectTimeoutMS: 5000,
+	serverSelectionTimeoutMS: 5000
+});
 
 let dbPromise;
 
