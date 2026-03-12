@@ -1,6 +1,7 @@
 <script>
     import { goto } from '$app/navigation';
     import { currentUser } from '$lib/stores'; // NEW: Import the global store
+    import { PUBLIC_API_URL } from '$env/static/public';
 
     let email = $state('');
     let password = $state('');
@@ -12,7 +13,7 @@
         loading = true;
 
         try {
-            const response = await fetch('/api/auth/login', {
+            const response = await fetch(`${PUBLIC_API_URL}/api/auth/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password })
@@ -50,7 +51,8 @@
 </svelte:head>
 
 <div class="page-container fade-in">
-    <a href="/" class="back-btn">
+    <!-- FIX: Added aria-label to satisfy the strict accessibility compiler -->
+    <a href="/" class="back-btn" aria-label="Go back">
         <i class="bx bx-arrow-back"></i>
     </a>
 
@@ -68,7 +70,8 @@
             </div>
         {/if}
 
-        <form on:submit|preventDefault={handleLogin} class="form-stack">
+        <!-- FIX: Updated to Svelte 5 'onsubmit' syntax -->
+        <form onsubmit={(e) => { e.preventDefault(); handleLogin(); }} class="form-stack">
             <div class="input-group">
                 <label for="email">Email Address</label>
                 <input type="email" id="email" bind:value={email} placeholder="your@email.com" required />
