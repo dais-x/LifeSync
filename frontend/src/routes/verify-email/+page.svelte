@@ -2,7 +2,7 @@
     import { onMount } from 'svelte';
     import { page } from '$app/stores';
     import { goto } from '$app/navigation';
-    import { PUBLIC_API_URL } from '$env/static/public'; // NEW: Import the API URL
+    import { PUBLIC_API_URL } from '$env/static/public';
 
     let email = $page.url.searchParams.get('email') || '';
     let otp = $state(['', '', '', '', '', '']);
@@ -36,7 +36,6 @@
         errorMessage = '';
 
         try {
-            // NEW: Added PUBLIC_API_URL to the fetch request
             const response = await fetch(`${PUBLIC_API_URL}/api/auth/verify-otp`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -71,7 +70,6 @@
         successMessage = '';
 
         try {
-            // NEW: Added PUBLIC_API_URL to the fetch request
             const response = await fetch(`${PUBLIC_API_URL}/api/auth/resend-otp`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -188,6 +186,8 @@
         background-color: var(--bg-dark);
         font-family: 'Inter', sans-serif;
         color: var(--text-main);
+        padding: 1rem; /* Ensures the card never hits the exact edge of the phone */
+        box-sizing: border-box;
     }
 
     .fade-in { animation: fadeIn 0.4s ease-out forwards; }
@@ -201,12 +201,13 @@
         border-radius: 1rem;
         border: 1px solid var(--border-color);
         text-align: center;
+        box-sizing: border-box; /* Crucial for preventing horizontal overflow */
     }
 
     .card-header { margin-bottom: 2rem; }
     .accent-icon { font-size: 2.5rem; color: var(--accent-purple); margin-bottom: 1rem; display: inline-block; }
     .card-header h2 { font-size: 1.5rem; color: white; margin: 0; }
-    .card-header p { font-size: 0.875rem; color: var(--text-muted); margin-top: 0.5rem; }
+    .card-header p { font-size: 0.875rem; color: var(--text-muted); margin-top: 0.5rem; word-break: break-all; }
 
     .banner {
         padding: 0.75rem;
@@ -221,10 +222,20 @@
     .banner.error { background: rgba(239, 68, 68, 0.1); border: 1px solid var(--accent-red); color: var(--accent-red); }
     .banner.success { background: rgba(16, 185, 129, 0.1); border: 1px solid var(--accent-green); color: var(--accent-green); }
 
-    .otp-inputs { display: flex; justify-content: space-between; gap: 0.5rem; margin-bottom: 2rem; }
+    .otp-inputs { 
+        display: flex; 
+        justify-content: space-between; 
+        gap: 0.5rem; 
+        margin-bottom: 2rem; 
+        width: 100%; /* Ensure container respects parent bounds */
+    }
+    
     .otp-inputs input {
-        width: 3.5rem;
-        height: 4rem;
+        flex: 1; /* Divides available space equally among the 6 inputs */
+        min-width: 0; /* Prevents inputs from rigidly blowing past their flex constraints */
+        aspect-ratio: 3.5 / 4; /* Maintains the nice rectangular shape */
+        max-width: 3.5rem; /* Prevents them from getting too huge on desktop */
+        height: auto;
         background: #0b0c15;
         border: 1px solid var(--border-color);
         border-radius: 0.75rem;
@@ -234,6 +245,7 @@
         text-align: center;
         outline: none;
         transition: border-color 0.2s;
+        padding: 0;
     }
     .otp-inputs input:focus { border-color: var(--accent-purple); }
 
@@ -262,4 +274,18 @@
     .resend-btn:disabled { color: var(--text-muted); cursor: not-allowed; }
 
     .result i { font-size: 3rem; color: var(--accent-green); margin-bottom: 1rem; display: block; }
+
+    /* MOBILE RESPONSIVENESS */
+    @media (max-width: 480px) {
+        .card {
+            padding: 1.5rem; /* Reduces massive padding on narrow screens */
+        }
+        .otp-inputs {
+            gap: 0.25rem; /* Tightens the gap between boxes so they fit nicely */
+        }
+        .otp-inputs input {
+            font-size: 1.25rem; /* Scales text down slightly */
+            border-radius: 0.5rem;
+        }
+    }
 </style>
