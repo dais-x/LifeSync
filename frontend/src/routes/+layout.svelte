@@ -130,6 +130,12 @@
         margin-left: 0 !important;
         width: 100% !important;
         padding: 0 !important;
+        
+        /* --- MOBILE SCROLL FIXES --- */
+        height: 100dvh !important; /* Uses dynamic viewport height for mobile browsers */
+        overflow-y: auto !important; /* Forces scrollbar when content overflows */
+        overflow-x: hidden !important;
+        -webkit-overflow-scrolling: touch !important; /* Smooth scrolling on iOS/Android */
     }
     
     .logout-btn {

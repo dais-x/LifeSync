@@ -90,7 +90,8 @@
         display: flex;
         flex-direction: column;
         position: relative;
-        overflow: hidden;
+        /* FIX: Changed from 'overflow: hidden' to 'overflow-x: hidden' to allow vertical scrolling */
+        overflow-x: hidden; 
     }
 
     /* --- ANIMATION --- */
