@@ -28,6 +28,27 @@
         }
     }
 
+    function handlePaste(e) {
+        e.preventDefault();
+        const data = e.clipboardData.getData('text').trim();
+        if (!/^\d+$/.test(data)) return; // Only allow digits
+
+        const digits = data.split('').slice(0, 6);
+        digits.forEach((digit, i) => {
+            otp[i] = digit;
+        });
+
+        // Focus the last filled input or the first empty one
+        const nextIndex = Math.min(digits.length, 5);
+        if (inputs[nextIndex]) {
+            inputs[nextIndex].focus();
+        }
+
+        if (digits.length === 6) {
+            handleVerify();
+        }
+    }
+
     async function handleVerify() {
         const code = otp.join('');
         if (code.length < 6) return;
@@ -145,6 +166,7 @@
                                 value={otp[i]}
                                 on:input={(e) => handleInput(e, i)}
                                 on:keydown={(e) => handleKeydown(e, i)}
+                                on:paste={handlePaste}
                                 required
                             />
                         {/each}
