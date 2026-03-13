@@ -4,12 +4,13 @@ import { generateOTP, hashToken } from '$lib/server/auth/token.js';
 import { sendEmail } from '$lib/server/email.js';
 
 export async function POST({ request }) {
-	const { email } = await request.json();
+	const { email: rawEmail } = await request.json();
 
-	if (!email) {
+	if (!rawEmail) {
 		return json({ error: 'Email is required' }, { status: 400 });
 	}
 
+	const email = rawEmail.toLowerCase();
 	const userCol = await users();
 	const user = await userCol.findOne({ email });
 

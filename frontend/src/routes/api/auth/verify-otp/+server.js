@@ -4,14 +4,15 @@ import { hashToken } from '$lib/server/auth/token.js';
 import { createSession } from '$lib/server/auth/session.js';
 
 export async function POST({ request, getClientAddress }) {
-	const { email, otp } = await request.json();
+	const { email: rawEmail, otp } = await request.json();
 	const userAgent = request.headers.get('user-agent') || 'unknown';
 	const ip = getClientAddress();
 
-	if (!email || !otp) {
+	if (!rawEmail || !otp) {
 		return json({ error: 'Email and OTP are required' }, { status: 400 });
 	}
 
+	const email = rawEmail.toLowerCase();
 	const userCol = await users();
 	const user = await userCol.findOne({ email });
 

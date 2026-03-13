@@ -5,12 +5,13 @@ import { generateOTP, hashToken } from '$lib/server/auth/token.js';
 import { sendEmail } from '$lib/server/email.js';
 
 export async function POST({ request }) {
-	const { name, email, password } = await request.json();
+	const { name, email: rawEmail, password } = await request.json();
 
-	if (!email || !password) {
+	if (!rawEmail || !password) {
 		return json({ error: 'Email and password are required' }, { status: 400 });
 	}
 
+	const email = rawEmail.toLowerCase();
 	const userCol = await users();
 	const existingUser = await userCol.findOne({ email });
 

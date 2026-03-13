@@ -4,14 +4,15 @@ import { verifyPassword } from '$lib/server/auth/password.js';
 import { createSession } from '$lib/server/auth/session.js';
 
 export async function POST({ request, getClientAddress }) {
-	const { email, password } = await request.json();
+	const { email: rawEmail, password } = await request.json();
 	const userAgent = request.headers.get('user-agent') || 'unknown';
 	const ip = getClientAddress();
 
-	if (!email || !password) {
+	if (!rawEmail || !password) {
 		return json({ error: 'Email and password are required' }, { status: 400 });
 	}
 
+	const email = rawEmail.toLowerCase();
 	const userCol = await users();
 	const user = await userCol.findOne({ email });
 
