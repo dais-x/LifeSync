@@ -509,7 +509,7 @@
     .custom-checkbox span { color: white; font-size: 0.9rem; text-transform: capitalize; }
 
     .cycle-display { display: flex; flex-direction: column; align-items: center; padding: 1rem 0 0; }
-    .cycle-circle { width: 120px; height: 120px; border: 8px solid var(--accent-pink); border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; margin-bottom: 1.5rem; transition: border-color 0.3s; position: relative; z-index: 1; }
+    .cycle-circle { width: 120px; height: 120px; border: 8px solid var(--accent-pink); border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; margin-bottom: 1.5rem; transition: border-color 0.3s; position: relative; z-index: 1; text-align: center; }
     .day { color: white; font-size: 1.5rem; font-weight: bold; }
     .phase { color: var(--accent-pink); font-size: 0.8rem; font-weight: bold; transition: color 0.3s; }
     .cycle-msg { text-align: center; color: var(--text-gray); font-size: 0.9rem; }
