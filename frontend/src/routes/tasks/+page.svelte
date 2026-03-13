@@ -537,7 +537,7 @@
                         >
                             <i class='bx bxs-cloud-upload drop-icon'></i>
                             <h4>Select a Schedule</h4>
-                            
+                            <p class="allowed-types">PDF, PNG, JPEG, JPG are allowed</p>
                         </div>
                         <input type="file" id="task-pdf-upload" accept="application/pdf,image/jpeg,image/png" style="display: none;" onchange={handleFileChange}>
                     {:else}
@@ -668,6 +668,7 @@
     .file-dropzone:hover { border-color: var(--accent-purple); background: rgba(139, 92, 246, 0.05); }
     .drop-icon { font-size: 3rem; color: #64748b; margin-bottom: 1rem; }
     .file-dropzone h4 { color: white; margin: 0 0 0.5rem 0; font-size: 1.1rem; }
+    .allowed-types { color: #64748b; font-size: 0.8rem; margin: 0; }
     .selected-file-card { display: flex; justify-content: space-between; align-items: center; background: #2a2a3c; padding: 1rem; border-radius: 0.75rem; border: 1px solid #3b3b54; margin-bottom: 1rem; }
     .file-info { display: flex; align-items: center; gap: 0.75rem; overflow: hidden; }
     .file-icon { color: #f43f5e; font-size: 1.5rem; }
