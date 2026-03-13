@@ -1,7 +1,31 @@
 <script>
-    import { userFormData } from '$lib/stores';
+    import { userFormData, currentUser } from '$lib/stores';
+    import { onMount } from 'svelte';
     // @ts-nocheck
     
+    let medicines = $state([]);
+    let isLoadingMeds = $state(true);
+
+    async function loadMedicines() {
+        if (!$currentUser || !$currentUser.id) return;
+        try {
+            const getMedsUrl = `https://fahim-n8n.laddu.cc/webhook/get-meds?userId=${$currentUser.id}`;
+            const response = await fetch(getMedsUrl);
+            if (response.ok) {
+                const data = await response.json();
+                medicines = Array.isArray(data) ? data : (data.data || []);
+            }
+        } catch (error) {
+            console.error('Error loading medicines:', error);
+        } finally {
+            isLoadingMeds = false;
+        }
+    }
+
+    onMount(() => {
+        loadMedicines();
+    });
+
     let currentDayOfCycle = $derived.by(() => {
         if (!$userFormData.last_period_date) return 0;
         
@@ -63,32 +87,38 @@
         <a href="/health/medicine" class="card-link">
             <div class="card relative clickable">
                 <h3><i class='bx bx-capsule' style="color:var(--accent-blue)"></i> Medication</h3>
-                <div class="med-item yellow">
-                    <div class="med-info">
-                        <div class="med-icon">VitC</div>
-                        <div>
-                            <div class="name">Vitamin C</div>
-                            <div class="desc">Orange round chewable</div>
+                {#if isLoadingMeds}
+                    <div class="setup-msg">
+                        <i class='bx bx-loader-alt bx-spin'></i>
+                        <p>Loading medicines...</p>
+                    </div>
+                {:else if medicines.length === 0}
+                    <div class="setup-msg">
+                        <i class='bx bx-plus-circle'></i>
+                        <p>Tap to add your medications</p>
+                    </div>
+                {:else}
+                    {#each medicines.slice(0, 2) as med}
+                        <div class="med-item {med.currentStock <= 10 ? 'yellow' : 'green'}">
+                            <div class="med-info">
+                                <div class="med-icon">{med.nickname?.substring(0, 4) || med.name?.substring(0, 4) || 'Med'}</div>
+                                <div>
+                                    <div class="name">{med.nickname || med.name}</div>
+                                    <div class="desc">{med.dosageText || 'Medication'}</div>
+                                </div>
+                            </div>
+                            <div class="med-stock">
+                                <div class="count">{med.currentStock} left</div>
+                                <div class="status" style="color: {med.currentStock <= 10 ? 'var(--accent-orange)' : 'var(--accent-green)'}">
+                                    {med.currentStock <= 10 ? 'Low Stock' : 'Good'}
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                    <div class="med-stock">
-                        <div class="count">12 left</div>
-                        <div class="status">Low Stock</div>
-                    </div>
-                </div>
-                <div class="med-item green">
-                    <div class="med-info">
-                        <div class="med-icon">Zn</div>
-                        <div>
-                            <div class="name">Zinc</div>
-                            <div class="desc">White oval pill</div>
-                        </div>
-                    </div>
-                    <div class="med-stock">
-                        <div class="count">28 left</div>
-                        <div class="status" style="color:var(--accent-green)">Good</div>
-                    </div>
-                </div>
+                    {/each}
+                    {#if medicines.length > 2}
+                        <p class="card-subtitle" style="margin-top: 0; text-align: center;">+ {medicines.length - 2} more medications</p>
+                    {/if}
+                {/if}
             </div>
         </a>
 
@@ -152,6 +182,7 @@
         --accent-blue: #87CEEB;
         --accent-red: #ff4d4d;
         --accent-green: #2ecc71;
+        --accent-orange: #fb923c;
     }
     .page-title { color: white; margin-bottom: 2rem; }
     .grid-layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
