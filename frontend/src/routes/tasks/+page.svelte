@@ -148,11 +148,36 @@
     // --- AI PDF UPLOAD LOGIC ---
     function handleFileChange(event) {
         const file = event.target.files[0];
-        if (file && file.type === 'application/pdf') {
+        if (validateFile(file)) {
             selectedFile = file;
         } else {
-            alert("Please select a valid PDF file.");
             event.target.value = '';
+        }
+    }
+
+    function validateFile(file) {
+        if (!file) return false;
+        const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png'];
+        const allowedExtensions = ['.pdf', '.jpg', '.jpeg', '.png'];
+        const extension = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+        if (allowedTypes.includes(file.type) || allowedExtensions.includes(extension)) {
+            return true;
+        }
+        alert("Please select a valid file (PDF, JPG, JPEG, or PNG).");
+        return false;
+    }
+
+    function handleDragOver(event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+
+    function handleDrop(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        const file = event.dataTransfer.files[0];
+        if (validateFile(file)) {
+            selectedFile = file;
         }
     }
 
@@ -494,11 +519,15 @@
                     <p class="helper-text">Upload a timetable, syllabus, or exam schedule. AI will magically extract all deadlines and convert them into tasks.</p>
                     
                     {#if !selectedFile}
-                        <div class="file-dropzone" onclick={() => document.getElementById('task-pdf-upload').click()}>
+                        <div class="file-dropzone" 
+                            onclick={() => document.getElementById('task-pdf-upload').click()}
+                            ondragover={handleDragOver}
+                            ondrop={handleDrop}
+                        >
                             <i class='bx bxs-cloud-upload drop-icon'></i>
                             <h4>Select a PDF Schedule</h4>
                         </div>
-                        <input type="file" id="task-pdf-upload" accept="application/pdf" style="display: none;" onchange={handleFileChange}>
+                        <input type="file" id="task-pdf-upload" accept="application/pdf,image/jpeg,image/png" style="display: none;" onchange={handleFileChange}>
                     {:else}
                         <div class="selected-file-card">
                             <div class="file-info">
