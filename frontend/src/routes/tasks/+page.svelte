@@ -591,6 +591,10 @@
                 <p><strong>Category:</strong> <span class="tag" style="border-left-color: {getCatColor(selectedTask.category)}">{selectedTask.category}</span></p>
                 <p><strong>Priority:</strong> <span class="tag-priority {selectedTask.priority.toLowerCase()}">{selectedTask.priority}</span></p>
                 <p><strong>Status:</strong> {selectedTask.status.replace('_', ' ')}</p>
+                {#if selectedTask.deadline}
+                    <p><strong>Date:</strong> {new Date(selectedTask.deadline).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                    <p><strong>Time:</strong> {new Date(selectedTask.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                {/if}
             </div>
         </div>
     </div>
