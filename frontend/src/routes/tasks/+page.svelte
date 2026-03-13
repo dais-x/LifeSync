@@ -58,6 +58,17 @@
     let selectedTask = $state(null);
     let activeMenu = $state(null);
 
+    function showNotification(msg) {
+        notificationMessage = msg;
+        notificationKey++;
+        // Clear message after 4 seconds to allow notification to fade out
+        setTimeout(() => {
+            if (notificationMessage === msg) {
+                notificationMessage = '';
+            }
+        }, 4000);
+    }
+
     // --- DERIVED ---
     let filteredTodo = $derived.by(() => {
         if (todoFilter === 'all') return todo;
@@ -163,7 +174,7 @@
         if (allowedTypes.includes(file.type) || allowedExtensions.includes(extension)) {
             return true;
         }
-        alert("Please select a valid file (PDF, JPG, JPEG, or PNG).");
+        showNotification("Please select a valid file (PDF, JPG, JPEG, or PNG).");
         return false;
     }
 
@@ -219,11 +230,11 @@
                 }
             }).catch(e => console.error("PDF upload error", e));
 
-            alert("Schedule uploaded! 🚀\nAI is breaking it down into tasks. They will appear here shortly.");
+            showNotification("Schedule uploaded! AI is breaking it down into tasks. 🚀");
             togglePopup();
             isUploading = false;
         };
-        reader.onerror = () => { alert("Error reading file."); isUploading = false; };
+        reader.onerror = () => { showNotification("Error reading file."); isUploading = false; };
         reader.readAsDataURL(selectedFile);
     }
 
@@ -525,7 +536,8 @@
                             ondrop={handleDrop}
                         >
                             <i class='bx bxs-cloud-upload drop-icon'></i>
-                            <h4>Select a PDF Schedule</h4>
+                            <h4>Select a Schedule</h4>
+                            
                         </div>
                         <input type="file" id="task-pdf-upload" accept="application/pdf,image/jpeg,image/png" style="display: none;" onchange={handleFileChange}>
                     {:else}
