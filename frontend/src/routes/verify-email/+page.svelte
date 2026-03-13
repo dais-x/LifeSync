@@ -55,7 +55,7 @@
 
             status = 'success';
             setTimeout(() => {
-                goto('/signup/details'); // Proceed to details after successful verification
+                goto('/dashboard'); // Proceed to dashboard after successful verification
             }, 1500);
         } catch (e) {
             status = 'error';

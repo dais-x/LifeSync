@@ -21,6 +21,12 @@
 
             const data = await response.json();
 
+            if (data.requireVerification) {
+                // REDIRECT TO THE EXISTING VERIFY-EMAIL ROUTE
+                goto(`/verify-email?email=${encodeURIComponent(data.email)}`);
+                return;
+            }
+
             if (!response.ok) {
                 throw new Error(data.error || 'Login failed');
             }
