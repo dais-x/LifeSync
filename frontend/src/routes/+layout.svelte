@@ -1,6 +1,4 @@
 <script>
-    export const prerender = true;
-    export const csr = true;
     import { page } from '$app/stores';
     import '../app.css';
     import { onMount } from 'svelte';
@@ -11,6 +9,9 @@
     import { currentUser } from '$lib/stores';
     import { goto } from '$app/navigation';
     import { browser } from '$app/environment';
+
+    // Svelte 5 props definition for children (Replaces <slot />)
+    let { children } = $props();
 
     // List of pages anyone can view without an account
     const publicRoutes = ['/', '/login', '/signup', '/verify-email', '/forgot-password', '/reset-password', '/signup/details'];
@@ -89,7 +90,8 @@
     {/if}
 
     <main class="main-content" class:full-width={isPublicRoute}>
-        <slot />
+        <!-- Svelte 5 replacement for <slot /> -->
+        {@render children()}
     </main>
 
     <!-- ONLY SHOW MOBILE NAV IF WE ARE INSIDE THE APP -->

@@ -1,5 +1,5 @@
 <script>
-    import { onMount } from 'svelte';
+    import { onMount, onDestroy } from 'svelte';
     import { slide, fade } from 'svelte/transition';
     import { spring } from 'svelte/motion';
     import Notification from '$lib/Notification.svelte';
@@ -14,11 +14,17 @@
     let showAddTaskPopup = $state(false);
     let activeIndex = $state(0);
 
+    // Edit & Reschedule State
+    let showEditPopup = $state(false);
+    let showReschedulePopup = $state(false);
+    let editTaskData = $state({ id: '', title: '', deadline: '', time: '', priority: 'mid', duration_minutes: 30, is_locked: false, category: 'General' });
+    let rescheduleData = $state({ id: '', deadline: '', time: '', priority: 'high' });
+
     // AI PDF Upload State
     let taskEntryMode = $state('manual'); // 'manual' or 'pdf'
     let selectedFile = $state(null);
     let isUploading = $state(false);
-    let aiInstruction = $state(''); // NEW: Custom AI Instruction state
+    let aiInstruction = $state(''); // Custom AI Instruction state
 
     // Swipe Logic
     let startX = 0;
@@ -32,6 +38,10 @@
     let newTaskTime = $state('23:59');
     let newTaskPriority = $state('mid');
     let repeatOption = $state('never');
+    
+    // Ghost Mode Tetris Properties
+    let newTaskDuration = $state(30); // Default to 30 mins
+    let newTaskIsLocked = $state(false); // Default OFF (Fluid task)
 
     let categories = $state([
         { name: 'Study', color: '#6366f1' },
@@ -52,6 +62,9 @@
     let todoFilter = $state('all');
     let filterStartDate = $state('');
     let filterEndDate = $state('');
+    
+    // NEW: Dynamic Ghost Mode Counter
+    let ghostRescheduleTimes = $state(0); 
 
     let notificationMessage = $state('');
     let notificationKey = $state(0);
@@ -61,7 +74,6 @@
     function showNotification(msg) {
         notificationMessage = msg;
         notificationKey++;
-        // Clear message after 4 seconds to allow notification to fade out
         setTimeout(() => {
             if (notificationMessage === msg) {
                 notificationMessage = '';
@@ -78,8 +90,11 @@
         const nextWeek = today + 7 * 86400000;
 
         return todo.filter(t => {
-            if (!t.deadline) return false;
-            const d = new Date(t.deadline).getTime();
+            // FIX: Prioritize AI's scheduled start time for filtering so tasks jump to the correct day
+            const targetDate = t.scheduled_start ? t.scheduled_start : t.deadline;
+            if (!targetDate) return false;
+            
+            const d = new Date(targetDate).getTime();
             if (todoFilter === 'today') return d >= today && d < tomorrow;
             if (todoFilter === 'tomorrow') return d >= tomorrow && d < (tomorrow + 86400000);
             if (todoFilter === 'week') return d >= today && d < nextWeek;
@@ -114,7 +129,7 @@
 
     // --- API & LOGIC ---
     async function fetchTasks() {
-        if (!$currentUser || !$currentUser.id) return; // Guard clause
+        if (!$currentUser || !$currentUser.id) return; 
 
         try {
             const res = await fetch(`${GET_URL}?userId=${$currentUser.id}`);
@@ -122,19 +137,31 @@
                 const incoming = await res.json();
                 let allTasks = incoming.data || incoming || [];
                 todo = []; inProgress = []; completed = [];
+                
                 allTasks.forEach(task => {
                     if (task.isDeleted) return;
                     const uiTask = {
                         id: task._id || task.id, name: task.title || "Untitled", category: task.category || "General",
                         priority: task.priority || "mid", deadline: task.deadline || "", status: task.status || "pending",
-                        user: "ME", attachments: 0, progress: task.progress || 0, completionTime: task.completionTime || null, color: task.color
+                        user: "ME", attachments: 0, progress: task.progress || 0, completionTime: task.completionTime || null, color: task.color,
+                        duration_minutes: task.duration_minutes || 30,
+                        is_locked: task.is_locked || false,
+                        reschedule_count: task.reschedule_count || 0,
+                        scheduled_start: task.scheduled_start || null, // NOW WE TRACK AI START TIME
+                        scheduled_end: task.scheduled_end || null      // NOW WE TRACK AI END TIME
                     };
+                    
                     if (uiTask.status === 'completed') completed.push(uiTask);
                     else if (uiTask.status === 'in_progress') inProgress.push(uiTask);
                     else todo.push(uiTask);
                 });
+                
                 todo = [...todo]; inProgress = [...inProgress]; completed = [...completed];
                 sortTodo();
+                
+                // Calculate total auto-reschedules for active tasks
+                ghostRescheduleTimes = todo.reduce((sum, t) => sum + t.reschedule_count, 0) + 
+                                       inProgress.reduce((sum, t) => sum + t.reschedule_count, 0);
             }
         } catch (e) { console.error(e); }
     }
@@ -144,9 +171,12 @@
         const combinedDeadline = newTaskDeadline ? `${newTaskDeadline} ${newTaskTime}` : '';
         const catObj = categories.find(c => c.name === selectedCategory);
         const payload = {
-            user_id: $currentUser.id, // DYNAMIC USER ID
+            user_id: $currentUser.id,
             title: newTaskName, status: "pending",
             priority: newTaskPriority, category: selectedCategory, deadline: combinedDeadline,
+            duration_minutes: newTaskDuration,
+            is_locked: newTaskIsLocked,
+            reschedule_count: 0, 
             timestamp: new Date().toISOString(), color: catObj?.color || '#6366f1'
         };
         try {
@@ -154,6 +184,92 @@
             togglePopup();
             fetchTasks();
         } catch (error) { console.error(error); }
+    }
+
+    // --- NEW EDIT & RESCHEDULE LOGIC ---
+    function updateLocalTask(id, updates) {
+        const apply = (list) => list.map(t => t.id === id ? { ...t, ...updates } : t);
+        todo = apply(todo);
+        inProgress = apply(inProgress);
+        completed = apply(completed);
+        sortTodo();
+    }
+
+    function openEdit(task) {
+        let d = '', t = '';
+        if (task.deadline) {
+            const parts = task.deadline.split(' ');
+            d = parts[0] || '';
+            t = parts[1] || '';
+        }
+        editTaskData = {
+            id: task.id,
+            title: task.name,
+            deadline: d,
+            time: t || '23:59',
+            priority: task.priority || 'mid',
+            duration_minutes: task.duration_minutes || 30,
+            is_locked: task.is_locked || false,
+            category: task.category || 'General'
+        };
+        showEditPopup = true;
+        activeMenu = null;
+    }
+
+    async function saveEdit() {
+        const combinedDeadline = editTaskData.deadline ? `${editTaskData.deadline} ${editTaskData.time}`.trim() : '';
+        const catObj = categories.find(c => c.name === editTaskData.category);
+
+        const updatePayload = {
+            title: editTaskData.title,
+            deadline: combinedDeadline,
+            priority: editTaskData.priority,
+            duration_minutes: editTaskData.duration_minutes,
+            is_locked: editTaskData.is_locked,
+            category: editTaskData.category,
+            color: catObj?.color || '#6366f1'
+        };
+
+        updateLocalTask(editTaskData.id, {
+            name: editTaskData.title,
+            ...updatePayload
+        });
+
+        showEditPopup = false;
+        apiManageTask('update', { id: editTaskData.id }, updatePayload);
+    }
+
+    function openReschedule(task) {
+        let d = '', t = '';
+        if (task.deadline) {
+            const parts = task.deadline.split(' ');
+            d = parts[0] || '';
+            t = parts[1] || '';
+        }
+        rescheduleData = {
+            id: task.id,
+            deadline: d,
+            time: t || '23:59',
+            priority: task.priority === 'past_deadline' ? 'high' : (task.priority || 'high')
+        };
+        showReschedulePopup = true;
+        activeMenu = null;
+    }
+
+    async function saveReschedule() {
+        const combinedDeadline = rescheduleData.deadline ? `${rescheduleData.deadline} ${rescheduleData.time}`.trim() : '';
+        
+        const updatePayload = {
+            deadline: combinedDeadline,
+            priority: rescheduleData.priority,
+            scheduled_start: null, 
+            scheduled_end: null    
+        };
+
+        updateLocalTask(rescheduleData.id, updatePayload);
+
+        showReschedulePopup = false;
+        apiManageTask('update', { id: rescheduleData.id }, updatePayload);
     }
 
     // --- AI PDF UPLOAD LOGIC ---
@@ -209,23 +325,21 @@
             const payload = {
                 fileName: selectedFile.name,
                 fileData: base64Data,
-                user_id: $currentUser.id, // DYNAMIC USER ID
+                user_id: $currentUser.id,
                 category: selectedCategory,
                 color: catObj?.color || '#6366f1',
-                instruction: aiInstruction, // NEW: Pass the instruction to n8n
+                instruction: aiInstruction, 
                 timestamp: new Date().toISOString()
             };
 
             const uploadUrl = 'https://fahim-n8n.laddu.cc/webhook/upload-task-pdf';
 
-            // Send to n8n asynchronously
             fetch(uploadUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             }).then(res => {
                 if(res.ok) {
-                    // Fetch background updates after a generous delay (AI processing time)
                     setTimeout(() => fetchTasks(), 6000);
                 }
             }).catch(e => console.error("PDF upload error", e));
@@ -245,7 +359,7 @@
     }
 
     function sortTodo() {
-        const pMap = { 'high': 3, 'mid': 2, 'low': 1 };
+        const pMap = { 'past_deadline': 4, 'high': 3, 'mid': 2, 'low': 1 };
         todo.sort((a, b) => (pMap[b.priority] || 0) - (pMap[a.priority] || 0));
         todo = [...todo];
     }
@@ -255,9 +369,12 @@
         if (!showAddTaskPopup) { 
             newTaskName = ''; 
             newTaskDeadline = ''; 
+            newTaskTime = '23:59';
+            newTaskDuration = 30; 
+            newTaskIsLocked = false;
             taskEntryMode = 'manual'; 
             selectedFile = null; 
-            aiInstruction = ''; // Reset instruction
+            aiInstruction = ''; 
         }
     }
 
@@ -316,11 +433,17 @@
 
     function getCatColor(catName) { return categories.find(c => c.name === catName)?.color || '#6366f1'; }
 
+    let pollInterval;
+
     onMount(() => {
-        // We only fetch tasks if they are logged in!
         if ($currentUser) {
             fetchTasks();
+            pollInterval = setInterval(fetchTasks, 10000);
         }
+    });
+
+    onDestroy(() => {
+        if (pollInterval) clearInterval(pollInterval);
     });
 </script>
 
@@ -330,11 +453,16 @@
         <button class="new-task-btn" onclick={togglePopup}><i class="bx bx-plus"></i> New Task </button>
     </div>
 
-    <div class="ghost-alert">
+    <!-- DYNAMIC GHOST ALERT -->
+    <div class="ghost-alert" class:active-interventions={ghostRescheduleTimes > 0}>
         <i class="bx bxs-ghost"></i>
         <div>
             <h4>Ghost Mode Active</h4>
-            <p>AI has auto-rescheduled 3 tasks due to low energy prediction.</p>
+            {#if ghostRescheduleTimes > 0}
+                <p>AI has auto-rescheduled tasks <strong>{ghostRescheduleTimes} time{ghostRescheduleTimes === 1 ? '' : 's'}</strong> based on your schedule.</p>
+            {:else}
+                <p>AI is silently monitoring and optimizing your fluid tasks.</p>
+            {/if}
         </div>
     </div>
 
@@ -379,16 +507,23 @@
                     </div>
                     <div class="task-container">
                         {#each filteredTodo as task (task.id)}
-                            <div class="task-card" onclick={() => selectedTask = task}>
+                            <div class="task-card" class:past-deadline-card={task.priority === 'past_deadline'} onclick={() => selectedTask = task}>
                                 <div class="card-header-actions">
                                     <div class="tag-row">
                                         <span class="tag" style="border-left-color: {getCatColor(task.category)}">{task.category}</span>
-                                        <span class="tag-priority {task.priority.toLowerCase()}">{task.priority}</span>
+                                        <span class="tag-priority {task.priority.toLowerCase()}">{task.priority.replace('_', ' ')}</span>
+                                        {#if task.is_locked}
+                                            <span class="tag-locked"><i class='bx bxs-lock-alt'></i></span>
+                                        {/if}
                                     </div>
                                     <div class="task-actions">
                                         <button class="options-btn" onclick={(e) => { e.stopPropagation(); toggleTaskMenu(task.id); }}><i class="bx bx-dots-horizontal-rounded"></i></button>
                                         {#if activeMenu === task.id}
                                             <div class="actions-menu" transition:slide>
+                                                {#if task.priority === 'past_deadline'}
+                                                    <button onclick={(e) => { e.stopPropagation(); openReschedule(task); }} class="reschedule-action"><i class='bx bx-calendar-event'></i> Reschedule</button>
+                                                {/if}
+                                                <button onclick={(e) => { e.stopPropagation(); openEdit(task); }}><i class='bx bx-edit'></i> Edit</button>
                                                 <button onclick={(e) => { e.stopPropagation(); moveToInProgress(task); }}><i class='bx bx-loader-alt'></i> Start</button>
                                                 <button onclick={(e) => { e.stopPropagation(); moveToCompleted(task); }}><i class='bx bx-check-double'></i> Finish</button>
                                                 <button onclick={(e) => { e.stopPropagation(); deleteTask(task.id); }} class="delete"><i class='bx bx-trash'></i> Delete</button>
@@ -397,6 +532,14 @@
                                     </div>
                                 </div>
                                 <h4>{task.name}</h4>
+                                <!-- DYNAMIC TIME DISPLAY (FIXED COLON) -->
+                                {#if task.reschedule_count > 0}
+                                    <p class="ai-scheduled-text"><i class='bx bxs-ghost bx-tada'></i> Rescheduled: {new Date(task.scheduled_start).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</p>
+                                {:else if task.scheduled_start}
+                                    <p class="due-text"><i class='bx bx-calendar-event'></i> Planned: {new Date(task.scheduled_start).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</p>
+                                {:else if task.deadline}
+                                    <p class="due-text"><i class='bx bx-time-five'></i> Due: {new Date(task.deadline).toLocaleDateString()}</p>
+                                {/if}
                             </div>
                         {/each}
                     </div>
@@ -409,13 +552,22 @@
                     <div class="col-header">In Progress <span class="badge">{inProgress.length}</span></div>
                     <div class="task-container">
                         {#each inProgress as task (task.id)}
-                            <div class="task-card" onclick={() => selectedTask = task}>
+                            <div class="task-card" class:past-deadline-card={task.priority === 'past_deadline'} onclick={() => selectedTask = task}>
                                 <div class="card-header-actions">
-                                    <span class="tag" style="border-left-color: {getCatColor(task.category)}">{task.category}</span>
+                                    <div class="tag-row">
+                                        <span class="tag" style="border-left-color: {getCatColor(task.category)}">{task.category}</span>
+                                        {#if task.is_locked}
+                                            <span class="tag-locked"><i class='bx bxs-lock-alt'></i></span>
+                                        {/if}
+                                    </div>
                                     <div class="task-actions">
                                         <button class="options-btn" onclick={(e) => { e.stopPropagation(); toggleTaskMenu(task.id); }}><i class="bx bx-dots-horizontal-rounded"></i></button>
                                         {#if activeMenu === task.id}
                                             <div class="actions-menu" transition:slide>
+                                                {#if task.priority === 'past_deadline'}
+                                                    <button onclick={(e) => { e.stopPropagation(); openReschedule(task); }} class="reschedule-action"><i class='bx bx-calendar-event'></i> Reschedule</button>
+                                                {/if}
+                                                <button onclick={(e) => { e.stopPropagation(); openEdit(task); }}><i class='bx bx-edit'></i> Edit</button>
                                                 <button onclick={(e) => { e.stopPropagation(); moveToCompleted(task); }}><i class='bx bx-check-double'></i> Finish</button>
                                                 <button onclick={(e) => { e.stopPropagation(); deleteTask(task.id); }} class="delete"><i class='bx bx-trash'></i> Delete</button>
                                             </div>
@@ -423,6 +575,14 @@
                                     </div>
                                 </div>
                                 <h4>{task.name}</h4>
+                                <!-- DYNAMIC TIME DISPLAY (FIXED COLON) -->
+                                {#if task.reschedule_count > 0}
+                                    <p class="ai-scheduled-text"><i class='bx bxs-ghost bx-tada'></i> Rescheduled: {new Date(task.scheduled_start).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</p>
+                                {:else if task.scheduled_start}
+                                    <p class="due-text"><i class='bx bx-calendar-event'></i> Planned: {new Date(task.scheduled_start).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</p>
+                                {:else if task.deadline}
+                                    <p class="due-text"><i class='bx bx-time-five'></i> Due: {new Date(task.deadline).toLocaleDateString()}</p>
+                                {/if}
                                 <input type="range" min="0" max="100" value={task.progress}
                                     oninput={(e) => handleProgressChange(task, e)}
                                     onclick={(e) => e.stopPropagation()}
@@ -446,11 +606,20 @@
                                         <button class="options-btn" onclick={(e) => { e.stopPropagation(); toggleTaskMenu(task.id); }}><i class="bx bx-dots-horizontal-rounded"></i></button>
                                         {#if activeMenu === task.id}
                                             <div class="actions-menu" transition:slide>
+                                                <button onclick={(e) => { e.stopPropagation(); openEdit(task); }}><i class='bx bx-edit'></i> Edit</button>
                                                 <button onclick={(e) => { e.stopPropagation(); deleteTask(task.id); }} class="delete"><i class='bx bx-trash'></i> Delete</button>
                                             </div>
                                         {/if}
                                     </div>
                                 </div>
+                                <!-- DYNAMIC TIME DISPLAY (FIXED COLON) -->
+                                {#if task.reschedule_count > 0}
+                                    <p class="ai-scheduled-text" style="opacity: 0.5;"><i class='bx bxs-ghost'></i> Rescheduled: {new Date(task.scheduled_start).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</p>
+                                {:else if task.scheduled_start}
+                                    <p class="due-text" style="opacity: 0.5;"><i class='bx bx-calendar-event'></i> Planned: {new Date(task.scheduled_start).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</p>
+                                {:else if task.deadline}
+                                    <p class="due-text" style="opacity: 0.5;"><i class='bx bx-time-five'></i> Due: {new Date(task.deadline).toLocaleDateString()}</p>
+                                {/if}
                             </div>
                         {/each}
                     </div>
@@ -461,7 +630,7 @@
     </div>
 </div>
 
-<!-- Add New Task Popup -->
+<!-- ================= ADD NEW TASK POPUP ================= -->
 {#if showAddTaskPopup}
     <div class="popup-backdrop" onclick={togglePopup}>
         <div class="popup" onclick={(e) => e.stopPropagation()}>
@@ -483,18 +652,37 @@
             {#if taskEntryMode === 'manual'}
                 <form onsubmit={(e) => { e.preventDefault(); handleAddTask(); }} class="task-form fade-in">
                     <div class="form-row">
-                        <div class="form-group" style="flex: 2;"><label>Task Name</label><input type="text" bind:value={newTaskName} placeholder="Task title"></div>
+                        <div class="form-group" style="flex: 2;"><label>Task Name</label><input type="text" bind:value={newTaskName} placeholder="Task title" required></div>
                         <div class="form-group"><label>Date</label><input type="date" bind:value={newTaskDeadline}></div>
                     </div>
                     <div class="form-row">
                         <div class="form-group"><label>Priority</label>
                             <select bind:value={newTaskPriority}><option value="low">Low</option><option value="mid">Mid</option><option value="high">High</option><option value="past_deadline">Past Deadline</option></select>
                         </div>
-                        <div class="form-group"><label>Time</label><input type="time" bind:value={newTaskTime}></div>
+                        <div class="form-group">
+                            <label>{newTaskIsLocked ? 'Exact Start Time' : 'Deadline (By)'}</label>
+                            <input type="time" bind:value={newTaskTime}>
+                        </div>
                         <div class="form-group"><label>Repeat</label>
                             <select bind:value={repeatOption}><option value="never">Never</option><option value="daily">Daily</option><option value="weekdays">Week days</option></select>
                         </div>
                     </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>{newTaskIsLocked ? 'Event Duration (Mins)' : 'Est. Time Needed (Mins)'}</label>
+                            <input type="number" bind:value={newTaskDuration} min="5" step="5" placeholder="e.g. 30">
+                        </div>
+                        <div class="form-group toggle-group">
+                            <label>Lock to Time</label>
+                            <label class="switch">
+                                <input type="checkbox" bind:checked={newTaskIsLocked}>
+                                <span class="switch-slider"></span>
+                            </label>
+                            <small class="helper-text-small">If locked, AI Ghost Mode won't reschedule this event.</small>
+                        </div>
+                    </div>
+
                     <div class="form-group">
                         <label>Category Color</label>
                         <div class="color-grid">
@@ -525,7 +713,6 @@
                     <button type="submit" class="save-btn">Add Task</button>
                 </form>
             {:else}
-                <!-- AI PDF UPLOAD FORM -->
                 <form onsubmit={handlePdfUpload} class="task-form fade-in">
                     <p class="helper-text">Upload a timetable, syllabus, or exam schedule. AI will magically extract all deadlines and convert them into tasks.</p>
                     
@@ -563,7 +750,6 @@
                             </div>
                         </div>
 
-                        <!-- NEW: Custom AI Instruction Input -->
                         <div class="form-group" style="margin-bottom: 1.5rem;">
                             <label for="pdfInstruction">Custom Instructions (Optional)</label>
                             <textarea id="pdfInstruction" rows="2" placeholder="e.g., Only extract exams for my discipline (Computer Science)" bind:value={aiInstruction}></textarea>
@@ -583,17 +769,114 @@
     </div>
 {/if}
 
+<!-- ================= EDIT TASK POPUP ================= -->
+{#if showEditPopup}
+    <div class="popup-backdrop" onclick={() => showEditPopup = false}>
+        <div class="popup" onclick={(e) => e.stopPropagation()}>
+            <div class="popup-header">
+                <h3>Edit Task</h3>
+                <button class="close-btn" onclick={() => showEditPopup = false}><i class="bx bx-x"></i></button>
+            </div>
+            <form onsubmit={(e) => { e.preventDefault(); saveEdit(); }} class="task-form fade-in">
+                <div class="form-group">
+                    <label>Task Name</label>
+                    <input type="text" bind:value={editTaskData.title} required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Date</label><input type="date" bind:value={editTaskData.deadline}></div>
+                    <div class="form-group">
+                        <label>{editTaskData.is_locked ? 'Exact Start Time' : 'Deadline (By)'}</label>
+                        <input type="time" bind:value={editTaskData.time}>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Priority</label>
+                        <select bind:value={editTaskData.priority}>
+                            <option value="low">Low</option>
+                            <option value="mid">Mid</option>
+                            <option value="high">High</option>
+                            <option value="past_deadline">Past Deadline</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Category</label>
+                        <select bind:value={editTaskData.category}>
+                            {#each categories as category}
+                                <option value={category.name}>{category.name}</option>
+                            {/each}
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>{editTaskData.is_locked ? 'Event Duration (Mins)' : 'Est. Time Needed (Mins)'}</label>
+                        <input type="number" bind:value={editTaskData.duration_minutes} min="5" step="5" required>
+                    </div>
+                    <div class="form-group toggle-group">
+                        <label>Lock to Time</label>
+                        <label class="switch">
+                            <input type="checkbox" bind:checked={editTaskData.is_locked}>
+                            <span class="switch-slider"></span>
+                        </label>
+                        <small class="helper-text-small">If locked, AI Ghost Mode won't reschedule this event.</small>
+                    </div>
+                </div>
+                <button type="submit" class="save-btn"><i class='bx bx-check'></i> Save Changes</button>
+            </form>
+        </div>
+    </div>
+{/if}
+
+<!-- ================= RESCHEDULE POPUP ================= -->
+{#if showReschedulePopup}
+    <div class="popup-backdrop" onclick={() => showReschedulePopup = false}>
+        <div class="popup" onclick={(e) => e.stopPropagation()}>
+            <div class="popup-header">
+                <h3><i class='bx bx-calendar-event' style="color: var(--accent-orange); margin-right: 0.2rem;"></i> Reschedule Task</h3>
+                <button class="close-btn" onclick={() => showReschedulePopup = false}><i class="bx bx-x"></i></button>
+            </div>
+            <form onsubmit={(e) => { e.preventDefault(); saveReschedule(); }} class="task-form fade-in">
+                <p class="helper-text" style="text-align: left;">Give this missed task a new lease on life by pushing it to a new date.</p>
+                <div class="form-row">
+                    <div class="form-group"><label>New Date</label><input type="date" bind:value={rescheduleData.deadline} required></div>
+                    <div class="form-group"><label>New Time</label><input type="time" bind:value={rescheduleData.time} required></div>
+                </div>
+                <div class="form-group">
+                    <label>Update Priority (Optional)</label>
+                    <select bind:value={rescheduleData.priority}>
+                        <option value="low">Low</option>
+                        <option value="mid">Mid</option>
+                        <option value="high">High</option>
+                    </select>
+                </div>
+                <button type="submit" class="save-btn" style="background: var(--accent-orange); color: #0b0c15;"><i class='bx bx-sync'></i> Confirm Reschedule</button>
+            </form>
+        </div>
+    </div>
+{/if}
+
 {#if selectedTask}
     <div class="popup-backdrop" onclick={() => selectedTask = null}>
         <div class="popup" onclick={(e) => e.stopPropagation()}>
             <div class="popup-header"><h3>{selectedTask.name}</h3><button class="close-btn" onclick={() => selectedTask = null}><i class="bx bx-x"></i></button></div>
             <div class="task-detail-content">
                 <p><strong>Category:</strong> <span class="tag" style="border-left-color: {getCatColor(selectedTask.category)}">{selectedTask.category}</span></p>
-                <p><strong>Priority:</strong> <span class="tag-priority {selectedTask.priority.toLowerCase()}">{selectedTask.priority}</span></p>
+                <p><strong>Priority:</strong> <span class="tag-priority {selectedTask.priority.toLowerCase()}">{selectedTask.priority.replace('_', ' ')}</span></p>
+                <p><strong>Type:</strong> {selectedTask.is_locked ? 'Fixed Event (Locked) 🔒' : 'Fluid Task 🌊'}</p>
+                <p><strong>Duration:</strong> {selectedTask.duration_minutes} mins</p>
+                
                 <p><strong>Status:</strong> {selectedTask.status.replace('_', ' ')}</p>
+                
+                <!-- DYNAMIC TIME DISPLAY FOR POPUP -->
+                {#if selectedTask.reschedule_count > 0}
+                    <p style="color: var(--accent-purple);"><strong><i class='bx bxs-ghost'></i> Rescheduled Start:</strong> {new Date(selectedTask.scheduled_start).toLocaleString()}</p>
+                    <p style="color: var(--accent-purple);"><strong><i class='bx bxs-ghost'></i> Rescheduled End:</strong> {new Date(selectedTask.scheduled_end).toLocaleString()}</p>
+                {:else if selectedTask.scheduled_start}
+                    <p><strong><i class='bx bx-calendar-event'></i> Planned Start:</strong> {new Date(selectedTask.scheduled_start).toLocaleString()}</p>
+                    <p><strong><i class='bx bx-calendar-event'></i> Planned End:</strong> {new Date(selectedTask.scheduled_end).toLocaleString()}</p>
+                {/if}
                 {#if selectedTask.deadline}
-                    <p><strong>Date:</strong> {new Date(selectedTask.deadline).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                    <p><strong>Time:</strong> {new Date(selectedTask.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                    <p><strong><i class='bx bx-time-five'></i> Hard Deadline:</strong> {new Date(selectedTask.deadline).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} {new Date(selectedTask.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                 {/if}
             </div>
         </div>
@@ -609,10 +892,16 @@
     .header-actions { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
     h2 { color: white; margin: 0; }
     .new-task-btn { background: var(--accent-purple); color: white; border: none; padding: 0.6rem 1rem; border-radius: 0.5rem; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 0.4rem; }
-    .ghost-alert { background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.3); padding: 1rem; border-radius: 0.75rem; display: flex; gap: 1rem; margin-bottom: 1.5rem; }
-    .ghost-alert i { font-size: 1.5rem; color: var(--accent-purple); }
+    
+    /* GHOST ALERT DYNAMICS */
+    .ghost-alert { background: rgba(156, 163, 175, 0.1); border: 1px solid rgba(156, 163, 175, 0.2); padding: 1rem; border-radius: 0.75rem; display: flex; gap: 1rem; margin-bottom: 1.5rem; transition: all 0.3s ease; }
+    .ghost-alert i { font-size: 1.5rem; color: var(--text-gray); transition: color 0.3s ease; }
     .ghost-alert h4 { color: white; margin: 0; font-size: 0.9rem; }
     .ghost-alert p { color: var(--text-gray); margin: 0.2rem 0 0; font-size: 0.8rem; }
+    
+    /* When active reschedules > 0, light it up purple */
+    .ghost-alert.active-interventions { background: rgba(99, 102, 241, 0.15); border-color: rgba(99, 102, 241, 0.4); box-shadow: 0 0 15px rgba(99, 102, 241, 0.1); }
+    .ghost-alert.active-interventions i { color: var(--accent-purple); }
 
     /* --- MOBILE CAROUSEL --- */
     .carousel-container { width: 100%; overflow: visible; padding: 1rem 0; perspective: 1000px; touch-action: pan-y pinch-zoom; }
@@ -635,17 +924,25 @@
     .range-date-input { background: #1e1f2e; color: var(--text-gray); border: 1px solid var(--border-color); padding: 0.2rem 0.4rem; border-radius: 0.4rem; font-size: 0.7rem; outline: none; color-scheme: dark; }
     .badge { background: #1e1f2e; color: var(--text-gray); padding: 0.1rem 0.5rem; border-radius: 1rem; font-size: 0.75rem; }
 
-    .task-card { background: #1e1f2e; padding: 1.25rem; border-radius: 1rem; border: 1px solid var(--border-color); margin-bottom: 1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); cursor: pointer; }
+    .task-card { background: #1e1f2e; padding: 1.25rem; border-radius: 1rem; border: 1px solid var(--border-color); margin-bottom: 1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); cursor: pointer; transition: all 0.2s; }
     .task-card:hover { border-color: var(--accent-purple); }
+    .task-card.past-deadline-card { border-color: rgba(239, 68, 68, 0.5); background: rgba(239, 68, 68, 0.05); }
     .task-card.completed h4 { text-decoration: line-through; opacity: 0.5; }
     .task-card h4 { color: white; margin: 0.75rem 0 0; font-size: 1rem; }
 
+    /* NEW TEXT STYLES FOR TIMESTAMPS */
+    .ai-scheduled-text { font-size: 0.75rem; color: var(--accent-purple); margin: 0.5rem 0 0 0; display: flex; align-items: center; gap: 0.3rem; font-weight: 500; }
+    .due-text { font-size: 0.75rem; color: var(--text-gray); margin: 0.5rem 0 0 0; display: flex; align-items: center; gap: 0.3rem; }
+
     .card-header-actions { display: flex; justify-content: space-between; align-items: flex-start; }
+    .tag-row { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
     .tag { font-size: 0.65rem; padding: 0.2rem 0.5rem; border-radius: 0.3rem; background: rgba(255,255,255,0.05); color: white; border-left: 3px solid; }
     .tag-priority { font-size: 0.6rem; text-transform: uppercase; font-weight: 800; color: #fff; margin-left: 5px; }
     .tag-priority.high { color: #f87171; }
     .tag-priority.mid { color: #fb923c; }
     .tag-priority.low { color: #4ade80; }
+    .tag-priority.past_deadline { color: #ef4444; text-shadow: 0 0 8px rgba(239, 68, 68, 0.5); }
+    .tag-locked { color: #f59e0b; font-size: 0.8rem; display: flex; align-items: center; } 
 
     .task-actions { position: relative; }
     .options-btn { background: none; border: none; color: var(--text-gray); font-size: 1.25rem; cursor: pointer; }
@@ -653,6 +950,7 @@
     .actions-menu button { background: none; border: none; color: var(--text-gray); padding: 0.5rem 0.75rem; text-align: left; cursor: pointer; border-radius: 0.25rem; display: flex; align-items: center; gap: 0.75rem; font-size: 0.85rem; }
     .actions-menu button:hover { background: var(--accent-purple); color: white; }
     .actions-menu .delete { color: #f87171; }
+    .actions-menu .reschedule-action { color: var(--accent-orange); }
 
     .progress-slider { width: 100%; margin-top: 1rem; height: 6px; border-radius: 3px; }
 
@@ -686,6 +984,16 @@
     .form-group label { color: var(--text-gray); font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
     .form-group input, .form-group textarea, .form-group select { background: #1e1f2e; border: 1px solid var(--border-color); color: white; padding: 0.75rem; border-radius: 0.5rem; font-size: 16px; width: 100%; outline: none; }
 
+    /* NEW: Toggle Switch CSS for Lock Feature */
+    .toggle-group { display: flex; flex-direction: column; gap: 8px; }
+    .switch { position: relative; display: inline-block; width: 44px; height: 24px; margin-top: 4px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .switch-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #1e1f2e; border: 1px solid var(--border-color); transition: .3s; border-radius: 34px; }
+    .switch-slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: var(--text-gray); transition: .3s; border-radius: 50%; }
+    input:checked + .switch-slider { background-color: rgba(245, 158, 11, 0.2); border-color: #f59e0b; }
+    input:checked + .switch-slider:before { transform: translateX(20px); background-color: #f59e0b; }
+    .helper-text-small { font-size: 0.65rem; color: var(--text-muted); margin-top: 2px; line-height: 1.2; }
+
     .category-list { display: flex; flex-direction: column; gap: 0.5rem; max-height: 150px; overflow-y: auto; margin-bottom: 0.5rem; }
     .category-item { display: flex; align-items: center; justify-content: space-between; background: #1e1f2e; padding: 0.5rem 0.75rem; border-radius: 0.5rem; border: 1px solid var(--border-color); }
     .category-item label { display: flex; align-items: center; gap: 10px; flex: 1; cursor: pointer; color: white; font-size: 0.85rem; }
@@ -703,6 +1011,8 @@
     
     .save-btn { width: 100%; background: var(--accent-purple); color: white; border: none; padding: 1rem; border-radius: 1rem; font-weight: 700; margin-top: 1rem; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 0.5rem; }
     .save-btn:disabled { opacity: 0.7; cursor: not-allowed; }
+
+    .task-detail-content p { color: var(--text-main); font-size: 0.95rem; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 10px; }
 
     /* Layout Toggle */
     @media (min-width: 769px) {
