@@ -9,6 +9,7 @@
     const SEND_URL = 'https://fahim-n8n.laddu.cc/webhook/sync-task';
     const GET_URL = 'https://fahim-n8n.laddu.cc/webhook/get-tasks';
     const MANAGE_URL = 'https://fahim-n8n.laddu.cc/webhook/manage-task';
+    const GHOST_MODE_URL = 'https://fahim-n8n.laddu.cc/webhook/ghost-reschedule-now'; // NEW: Ghost Mode Webhook
 
     // --- STATE ---
     let showAddTaskPopup = $state(false);
@@ -25,6 +26,9 @@
     let selectedFile = $state(null);
     let isUploading = $state(false);
     let aiInstruction = $state(''); // Custom AI Instruction state
+
+    // Ghost Mode Trigger State
+    let isGhosting = $state(false); // NEW: To show loading state on the banner
 
     // Swipe Logic
     let startX = 0;
@@ -90,7 +94,6 @@
         const nextWeek = today + 7 * 86400000;
 
         return todo.filter(t => {
-            // FIX: Prioritize AI's scheduled start time for filtering so tasks jump to the correct day
             const targetDate = t.scheduled_start ? t.scheduled_start : t.deadline;
             if (!targetDate) return false;
             
@@ -147,8 +150,8 @@
                         duration_minutes: task.duration_minutes || 30,
                         is_locked: task.is_locked || false,
                         reschedule_count: task.reschedule_count || 0,
-                        scheduled_start: task.scheduled_start || null, // NOW WE TRACK AI START TIME
-                        scheduled_end: task.scheduled_end || null      // NOW WE TRACK AI END TIME
+                        scheduled_start: task.scheduled_start || null,
+                        scheduled_end: task.scheduled_end || null
                     };
                     
                     if (uiTask.status === 'completed') completed.push(uiTask);
@@ -159,11 +162,31 @@
                 todo = [...todo]; inProgress = [...inProgress]; completed = [...completed];
                 sortTodo();
                 
-                // Calculate total auto-reschedules for active tasks
                 ghostRescheduleTimes = todo.reduce((sum, t) => sum + t.reschedule_count, 0) + 
                                        inProgress.reduce((sum, t) => sum + t.reschedule_count, 0);
             }
         } catch (e) { console.error(e); }
+    }
+
+    // Manual Trigger for Ghost Mode
+    async function triggerGhostMode() {
+        if (isGhosting) return;
+        isGhosting = true;
+        showNotification("Ghost Mode activated. AI is calculating gaps...");
+        
+        try {
+            await fetch(GHOST_MODE_URL, { method: 'POST' });
+            
+            setTimeout(() => {
+                fetchTasks();
+                isGhosting = false;
+                showNotification("Schedule optimized.");
+            }, 5000);
+            
+        } catch (e) { 
+            console.error("Ghost Mode error:", e);
+            isGhosting = false; 
+        }
     }
 
     async function handleAddTask() {
@@ -186,7 +209,6 @@
         } catch (error) { console.error(error); }
     }
 
-    // --- NEW EDIT & RESCHEDULE LOGIC ---
     function updateLocalTask(id, updates) {
         const apply = (list) => list.map(t => t.id === id ? { ...t, ...updates } : t);
         todo = apply(todo);
@@ -272,7 +294,6 @@
         apiManageTask('update', { id: rescheduleData.id }, updatePayload);
     }
 
-    // --- AI PDF UPLOAD LOGIC ---
     function handleFileChange(event) {
         const file = event.target.files[0];
         if (validateFile(file)) {
@@ -453,27 +474,30 @@
         <button class="new-task-btn" onclick={togglePopup}><i class="bx bx-plus"></i> New Task </button>
     </div>
 
-    <!-- DYNAMIC GHOST ALERT -->
-    <div class="ghost-alert" class:active-interventions={ghostRescheduleTimes > 0}>
-        <i class="bx bxs-ghost"></i>
+    <button class="ghost-alert" class:active-interventions={ghostRescheduleTimes > 0} onclick={triggerGhostMode} disabled={isGhosting}>
+        {#if isGhosting}
+            <i class="bx bx-loader-alt custom-spin"></i>
+        {:else}
+            <i class="bx bxs-ghost"></i>
+        {/if}
         <div>
             <h4>Ghost Mode Active</h4>
-            {#if ghostRescheduleTimes > 0}
-                <p>AI has auto-rescheduled tasks <strong>{ghostRescheduleTimes} time{ghostRescheduleTimes === 1 ? '' : 's'}</strong> based on your schedule.</p>
+            {#if isGhosting}
+                <p>AI is calculating new gaps and optimizing...</p>
+            {:else if ghostRescheduleTimes > 0}
+                <p>AI has auto-rescheduled tasks <strong>{ghostRescheduleTimes} time{ghostRescheduleTimes === 1 ? '' : 's'}</strong>. Click to force sweep.</p>
             {:else}
-                <p>AI is silently monitoring and optimizing your fluid tasks.</p>
+                <p>AI is silently monitoring. Click to run a manual sweep.</p>
             {/if}
         </div>
-    </div>
+    </button>
 
-    <!-- Mobile Tabs Navigation -->
     <div class="mobile-tabs">
         <button class:active={activeIndex === 0} onclick={() => activeIndex = 0}>To Do <span>({filteredTodo.length})</span></button>
         <button class:active={activeIndex === 1} onclick={() => activeIndex = 1}>Progress <span>({inProgress.length})</span></button>
         <button class:active={activeIndex === 2} onclick={() => activeIndex = 2}>Done <span>({completed.length})</span></button>
     </div>
 
-    <!-- Swipeable Carousel Container -->
     <div class="carousel-container"
          ontouchstart={handleTouchStart}
          ontouchmove={handleTouchMove}
@@ -481,7 +505,6 @@
     >
         <div class="carousel-track" style="transform: translate3d(calc(-{activeIndex * 85}% + 7.5% + {$swipeOffset}px), 0, 0)">
 
-            <!-- COLUMN: TO DO -->
             <div class="carousel-item" class:active={activeIndex === 0}>
                 <div class="kanban-col">
                     <div class="col-header">
@@ -532,7 +555,6 @@
                                     </div>
                                 </div>
                                 <h4>{task.name}</h4>
-                                <!-- DYNAMIC TIME DISPLAY (FIXED COLON) -->
                                 {#if task.reschedule_count > 0}
                                     <p class="ai-scheduled-text"><i class='bx bxs-ghost bx-tada'></i> Rescheduled: {new Date(task.scheduled_start).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</p>
                                 {:else if task.scheduled_start}
@@ -546,7 +568,6 @@
                 </div>
             </div>
 
-            <!-- COLUMN: PROGRESS -->
             <div class="carousel-item" class:active={activeIndex === 1}>
                 <div class="kanban-col">
                     <div class="col-header">In Progress <span class="badge">{inProgress.length}</span></div>
@@ -575,7 +596,6 @@
                                     </div>
                                 </div>
                                 <h4>{task.name}</h4>
-                                <!-- DYNAMIC TIME DISPLAY (FIXED COLON) -->
                                 {#if task.reschedule_count > 0}
                                     <p class="ai-scheduled-text"><i class='bx bxs-ghost bx-tada'></i> Rescheduled: {new Date(task.scheduled_start).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</p>
                                 {:else if task.scheduled_start}
@@ -593,7 +613,6 @@
                 </div>
             </div>
 
-            <!-- COLUMN: COMPLETED -->
             <div class="carousel-item" class:active={activeIndex === 2}>
                 <div class="kanban-col">
                     <div class="col-header">Completed <span class="badge">{completed.length}</span></div>
@@ -612,7 +631,6 @@
                                         {/if}
                                     </div>
                                 </div>
-                                <!-- DYNAMIC TIME DISPLAY (FIXED COLON) -->
                                 {#if task.reschedule_count > 0}
                                     <p class="ai-scheduled-text" style="opacity: 0.5;"><i class='bx bxs-ghost'></i> Rescheduled: {new Date(task.scheduled_start).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</p>
                                 {:else if task.scheduled_start}
@@ -630,7 +648,6 @@
     </div>
 </div>
 
-<!-- ================= ADD NEW TASK POPUP ================= -->
 {#if showAddTaskPopup}
     <div class="popup-backdrop" onclick={togglePopup}>
         <div class="popup" onclick={(e) => e.stopPropagation()}>
@@ -639,7 +656,6 @@
                 <button class="close-btn" onclick={togglePopup}><i class="bx bx-x"></i></button>
             </div>
 
-            <!-- TABS FOR MANUAL OR AI IMPORT -->
             <div class="entry-tabs">
                 <button type="button" class:active={taskEntryMode === 'manual'} onclick={() => taskEntryMode = 'manual'}>
                     <i class='bx bx-edit-alt'></i> Manual Entry
@@ -757,7 +773,7 @@
 
                         <button type="submit" class="save-btn ai-btn" disabled={isUploading}>
                             {#if isUploading}
-                                <i class='bx bx-loader-alt bx-spin'></i> Uploading to AI...
+                                <i class='bx bx-loader-alt custom-spin'></i> Uploading to AI...
                             {:else}
                                 <i class='bx bx-brain'></i> Extract Tasks
                             {/if}
@@ -769,7 +785,6 @@
     </div>
 {/if}
 
-<!-- ================= EDIT TASK POPUP ================= -->
 {#if showEditPopup}
     <div class="popup-backdrop" onclick={() => showEditPopup = false}>
         <div class="popup" onclick={(e) => e.stopPropagation()}>
@@ -827,7 +842,6 @@
     </div>
 {/if}
 
-<!-- ================= RESCHEDULE POPUP ================= -->
 {#if showReschedulePopup}
     <div class="popup-backdrop" onclick={() => showReschedulePopup = false}>
         <div class="popup" onclick={(e) => e.stopPropagation()}>
@@ -867,7 +881,6 @@
                 
                 <p><strong>Status:</strong> {selectedTask.status.replace('_', ' ')}</p>
                 
-                <!-- DYNAMIC TIME DISPLAY FOR POPUP -->
                 {#if selectedTask.reschedule_count > 0}
                     <p style="color: var(--accent-purple);"><strong><i class='bx bxs-ghost'></i> Rescheduled Start:</strong> {new Date(selectedTask.scheduled_start).toLocaleString()}</p>
                     <p style="color: var(--accent-purple);"><strong><i class='bx bxs-ghost'></i> Rescheduled End:</strong> {new Date(selectedTask.scheduled_end).toLocaleString()}</p>
@@ -893,14 +906,24 @@
     h2 { color: white; margin: 0; }
     .new-task-btn { background: var(--accent-purple); color: white; border: none; padding: 0.6rem 1rem; border-radius: 0.5rem; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 0.4rem; }
     
-    /* GHOST ALERT DYNAMICS */
-    .ghost-alert { background: rgba(156, 163, 175, 0.1); border: 1px solid rgba(156, 163, 175, 0.2); padding: 1rem; border-radius: 0.75rem; display: flex; gap: 1rem; margin-bottom: 1.5rem; transition: all 0.3s ease; }
-    .ghost-alert i { font-size: 1.5rem; color: var(--text-gray); transition: color 0.3s ease; }
+    /* INTERACTIVE GHOST ALERT */
+    .ghost-alert { 
+        background: rgba(156, 163, 175, 0.1); border: 1px solid rgba(156, 163, 175, 0.2); padding: 1rem; border-radius: 0.75rem; 
+        display: flex; gap: 1rem; margin-bottom: 1.5rem; transition: all 0.3s ease; text-align: left; width: 100%; cursor: pointer;
+    }
+    .ghost-alert:hover { background: rgba(156, 163, 175, 0.15); border-color: rgba(156, 163, 175, 0.4); }
+    .ghost-alert:disabled { cursor: not-allowed; opacity: 0.8; }
+    
+    /* NEW: Perfectly centered smooth spin for boxicons */
+    .ghost-alert i { font-size: 1.5rem; color: var(--text-gray); transition: color 0.3s ease; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; }
+    .custom-spin { animation: smoothSpin 1.2s linear infinite; transform-origin: center center; }
+    @keyframes smoothSpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
     .ghost-alert h4 { color: white; margin: 0; font-size: 0.9rem; }
     .ghost-alert p { color: var(--text-gray); margin: 0.2rem 0 0; font-size: 0.8rem; }
     
-    /* When active reschedules > 0, light it up purple */
     .ghost-alert.active-interventions { background: rgba(99, 102, 241, 0.15); border-color: rgba(99, 102, 241, 0.4); box-shadow: 0 0 15px rgba(99, 102, 241, 0.1); }
+    .ghost-alert.active-interventions:hover { background: rgba(99, 102, 241, 0.25); }
     .ghost-alert.active-interventions i { color: var(--accent-purple); }
 
     /* --- MOBILE CAROUSEL --- */
@@ -930,7 +953,6 @@
     .task-card.completed h4 { text-decoration: line-through; opacity: 0.5; }
     .task-card h4 { color: white; margin: 0.75rem 0 0; font-size: 1rem; }
 
-    /* NEW TEXT STYLES FOR TIMESTAMPS */
     .ai-scheduled-text { font-size: 0.75rem; color: var(--accent-purple); margin: 0.5rem 0 0 0; display: flex; align-items: center; gap: 0.3rem; font-weight: 500; }
     .due-text { font-size: 0.75rem; color: var(--text-gray); margin: 0.5rem 0 0 0; display: flex; align-items: center; gap: 0.3rem; }
 
@@ -960,12 +982,10 @@
     .popup-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
     .close-btn { background: none; border: none; color: var(--text-gray); font-size: 1.5rem; cursor: pointer; }
     
-    /* NEW: Entry Tabs CSS */
     .entry-tabs { display: flex; gap: 0.5rem; background: #1e1f2e; padding: 0.4rem; border-radius: 0.75rem; margin-bottom: 1.5rem; border: 1px solid var(--border-color); }
     .entry-tabs button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.5rem; background: transparent; color: var(--text-gray); border: none; padding: 0.6rem; border-radius: 0.5rem; font-weight: 600; cursor: pointer; transition: 0.2s; }
     .entry-tabs button.active { background: var(--accent-purple); color: white; }
 
-    /* NEW: File Dropzone CSS */
     .file-dropzone { border: 2px dashed #3b3b54; border-radius: 1rem; padding: 3rem 1.5rem; text-align: center; cursor: pointer; transition: all 0.2s; background: rgba(255, 255, 255, 0.02); }
     .file-dropzone:hover { border-color: var(--accent-purple); background: rgba(139, 92, 246, 0.05); }
     .drop-icon { font-size: 3rem; color: #64748b; margin-bottom: 1rem; }
@@ -984,7 +1004,6 @@
     .form-group label { color: var(--text-gray); font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
     .form-group input, .form-group textarea, .form-group select { background: #1e1f2e; border: 1px solid var(--border-color); color: white; padding: 0.75rem; border-radius: 0.5rem; font-size: 16px; width: 100%; outline: none; }
 
-    /* NEW: Toggle Switch CSS for Lock Feature */
     .toggle-group { display: flex; flex-direction: column; gap: 8px; }
     .switch { position: relative; display: inline-block; width: 44px; height: 24px; margin-top: 4px; }
     .switch input { opacity: 0; width: 0; height: 0; }
