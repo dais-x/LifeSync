@@ -1032,7 +1032,7 @@
     .save-btn:disabled { opacity: 0.7; cursor: not-allowed; }
 
     .task-detail-content p { color: var(--text-main); font-size: 0.95rem; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 10px; }
-    /* test commit comment */
+    /* test commit comment 2 */
     /* Layout Toggle */
     @media (min-width: 769px) {
         .carousel-track { transform: none !important; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; width: 100%; }
