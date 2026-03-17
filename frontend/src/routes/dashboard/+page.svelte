@@ -5,7 +5,7 @@
     import { currentUser } from '$lib/stores';
 
     // --- NEW: NATIVE CAPACITOR IMPORTS ---
-    import { Capacitor } from '@capacitor/core';
+    import { Capacitor, CapacitorHttp } from '@capacitor/core';
     import { SpeechRecognition } from '@capacitor-community/speech-recognition';
 
     // --- API CONFIGURATION ---
@@ -65,25 +65,48 @@
         }, 4000);
     }
 
+
+
+    // --- THE NATIVE HTTP BRIDGE ---
+    // Bypasses Android WebView/CORS restrictions by routing through the OS
+    async function apiRequest(url, method = 'GET', body = null) {
+        if (Capacitor.isNativePlatform()) {
+            const options = { url, headers: { 'Content-Type': 'application/json' } };
+            if (body) options.data = body;
+            
+            const response = await (method === 'GET' ? CapacitorHttp.get(options) : CapacitorHttp.post(options));
+            if (response.status >= 400) throw new Error(`HTTP ${response.status}`);
+            
+            return typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
+        } else {
+            const options = { method, headers: { 'Content-Type': 'application/json' } };
+            if (body) options.body = JSON.stringify(body);
+            
+            const response = await fetch(url, options);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            
+            return await response.json();
+        }
+    }
+
+
+
     // --- MAIN SYNC FUNCTION ---
     async function refreshDashboard() {
         if (!$currentUser || !$currentUser.id) return;
 
         try {
-            const res = await fetch(`${GET_URL}?userId=${$currentUser.id}`);
-            if (res.ok) {
-                const incoming = await res.json();
-                let tasks = [];
+            const incoming = await apiRequest(`${GET_URL}?userId=${$currentUser.id}`, 'GET');
+            let tasks = [];
 
-                if (incoming.data && Array.isArray(incoming.data)) {
-                    tasks = incoming.data.filter(t => t.isDeleted !== true);
-                } else if (Array.isArray(incoming)) {
-                    tasks = incoming;
-                }
-                allTasks = tasks;
-
-                updateAllProcessors();
+            if (incoming.data && Array.isArray(incoming.data)) {
+                tasks = incoming.data.filter(t => t.isDeleted !== true);
+            } else if (Array.isArray(incoming)) {
+                tasks = incoming;
             }
+            allTasks = tasks;
+
+            updateAllProcessors();
         } catch (e) {
             console.error("Sync failed:", e);
         }
@@ -110,17 +133,13 @@
         updateAllProcessors();
 
         try {
-            await fetch(MANAGE_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'update',
-                    id: taskId,
-                    updateFields: {
-                        status: 'completed',
-                        completionTime: new Date().toISOString()
-                    }
-                })
+            await apiRequest(MANAGE_URL, 'POST', {
+                action: 'update',
+                id: taskId,
+                updateFields: {
+                    status: 'completed',
+                    completionTime: new Date().toISOString()
+                }
             });
         } catch (e) {
             console.error("Failed to complete task:", e);
@@ -266,25 +285,16 @@
 
             try {
                 const mimeType = audioBase64.split(';')[0].split(':')[1] || 'audio/webm';
-                const res = await fetch(TRANSCRIBE_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userId: $currentUser.id, audio: audioBase64, mimeType })
-                });
+                
+                const data = await apiRequest(TRANSCRIBE_URL, 'POST', { userId: $currentUser.id, audio: audioBase64, mimeType });
+                const transcribedText = data.text || "(Inaudible)";
+                
+                // Update bubble with actual text
+                chatHistory = chatHistory.map(msg => msg.id === msgId ? { ...msg, content: transcribedText } : msg);
+                scrollToBottom();
 
-                if (res.ok) {
-                    const data = await res.json();
-                    const transcribedText = data.text || "(Inaudible)";
-                    
-                    // Update bubble with actual text
-                    chatHistory = chatHistory.map(msg => msg.id === msgId ? { ...msg, content: transcribedText } : msg);
-                    scrollToBottom();
-
-                    // STEP 2: Send transcribed text to Gemma
-                    sendToBrain(transcribedText);
-                } else {
-                    throw new Error("Transcription Failed");
-                }
+                // STEP 2: Send transcribed text to Gemma
+                sendToBrain(transcribedText);
             } catch (e) {
                 console.error(e);
                 chatHistory = chatHistory.map(msg => msg.id === msgId ? { ...msg, content: "⚠️ Could not transcribe audio." } : msg);
@@ -298,30 +308,35 @@
     }
 
     // --- THE BRAIN HANDLER ---
-    function sendToBrain(text) {
+    // --- THE BRAIN HANDLER ---
+    async function sendToBrain(text) {
         if (!text || text.trim() === '' || text.includes('⚠️')) return;
 
         isAiThinking = true;
         scrollToBottom();
 
-        fetch(THOUGHT_CATCHER_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: $currentUser.id, thought: text })
-        })
-        .then(res => res.json())
-        .then(data => {
+        const historyPayload = chatHistory.map(msg => ({
+            role: msg.role,
+            content: msg.content
+        }));
+
+        try {
+            const data = await apiRequest(THOUGHT_CATCHER_URL, 'POST', { 
+                userId: $currentUser.id, 
+                thought: text,
+                history: historyPayload 
+            });
+
             isAiThinking = false;
             chatHistory = [...chatHistory, { id: Date.now(), role: 'bot', type: 'text', content: data.reply || "Done!" }];
             scrollToBottom();
-            if (data.type === 'create_task') refreshDashboard();
-        })
-        .catch(e => {
-            console.error(e);
+            if (['create_task', 'update_task', 'delete_task'].includes(data.type)) refreshDashboard();
+        } catch (e) {
+            console.error("Brain Error:", e);
             isAiThinking = false;
-            chatHistory = [...chatHistory, { id: Date.now(), role: 'bot', type: 'text', content: "I'm resting right now. Please try again later." }];
+            chatHistory = [...chatHistory, { id: Date.now(), role: 'bot', type: 'text', content: `⚠️ Error: ${e.message}` }];
             scrollToBottom();
-        });
+        }
     }
 
     // --- DATA PROCESSORS ---

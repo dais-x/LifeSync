@@ -21,10 +21,11 @@ services:
     restart: always
 
   # 2. THE TUNNEL (Cloudflare)
+  # 2. THE TUNNEL (Cloudflare)
   tunnel:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
-    command: tunnel run
+    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN}
     network_mode: host
     environment:
       - TUNNEL_TOKEN=${TUNNEL_TOKEN}
@@ -40,7 +41,7 @@ services:
       - WEBHOOK_URL=${WEBHOOK_URL}
       - MONGODB_URI=${MONGODB_URI}
       - GENERIC_TIMEZONE=Asia/Taipei
-      - N8N_CORS_ALLOWED_ORIGINS=* # Allowing phone and web origins
+      - N8N_CORS_ALLOWED_ORIGINS=*
     volumes:
       - n8n_storage:/home/node/.n8n
     networks:
