@@ -170,12 +170,16 @@
 
     // Manual Trigger for Ghost Mode
     async function triggerGhostMode() {
-        if (isGhosting) return;
+        if (isGhosting || !$currentUser || !$currentUser.id) return;
         isGhosting = true;
         showNotification("Ghost Mode activated. AI is calculating gaps...");
         
         try {
-            await fetch(GHOST_MODE_URL, { method: 'POST' });
+            await fetch(GHOST_MODE_URL, { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: $currentUser.id })
+            });
             
             setTimeout(() => {
                 fetchTasks();

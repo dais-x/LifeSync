@@ -1,17 +1,22 @@
 <script>
-    import { onMount, onDestroy } from 'svelte';
+    import { onMount, onDestroy, tick } from 'svelte';
     import { slide } from 'svelte/transition';
     import Notification from '$lib/Notification.svelte';
-    import { currentUser } from '$lib/stores'; // NEW: Import the global store
+    import { currentUser } from '$lib/stores';
+
+    // --- NEW: NATIVE CAPACITOR IMPORTS ---
+    import { Capacitor } from '@capacitor/core';
+    import { SpeechRecognition } from '@capacitor-community/speech-recognition';
 
     // --- API CONFIGURATION ---
     const GET_URL = 'https://fahim-n8n.laddu.cc/webhook/get-tasks';
     const MANAGE_URL = 'https://fahim-n8n.laddu.cc/webhook/manage-task';
+    const TRANSCRIBE_URL = 'https://fahim-n8n.laddu.cc/webhook/transcribe-audio';
+    const THOUGHT_CATCHER_URL = 'https://fahim-n8n.laddu.cc/webhook/thought-catcher';
     const POLL_INTERVAL = 10000;
 
     // --- STATE VARIABLES ---
     let pollInterval;
-    let showWelcomeNotification = $state(false);
 
     // Dynamic Data State
     let totalActive = $state(0);
@@ -30,12 +35,41 @@
     let categoryStats = $state([]);
     let donutGradient = $state('conic-gradient(#2a2b3d 0% 100%)');
 
+    // --- NEW: SMART ASSISTANT CHAT STATE ---
+    let thoughtText = $state('');
+    let isListening = $state(false);
+    let isRecordingAudio = $state(false);
+    
+    // Chat UI State
+    let chatHistory = $state([]); 
+    // Format: { id: number, role: 'user'|'bot', type: 'text'|'audio', content: string, audioUrl?: string }
+    let isAiThinking = $state(false);
+    let chatContainer = $state(null);
+    
+    // Non-reactive variables for media objects
+    let webRecognition = null;
+    let mediaRecorder = null;
+    let audioChunks = [];
+
+    // --- NOTIFICATION SYSTEM ---
+    let notificationMessage = $state('');
+    let notificationKey = $state(0);
+
+    function showNotification(msg) {
+        notificationMessage = msg;
+        notificationKey++;
+        setTimeout(() => {
+            if (notificationMessage === msg) {
+                notificationMessage = '';
+            }
+        }, 4000);
+    }
+
     // --- MAIN SYNC FUNCTION ---
     async function refreshDashboard() {
-        if (!$currentUser || !$currentUser.id) return; // NEW: Guard clause prevents polling when logged out
+        if (!$currentUser || !$currentUser.id) return;
 
         try {
-            // NEW: Send userId dynamically
             const res = await fetch(`${GET_URL}?userId=${$currentUser.id}`);
             if (res.ok) {
                 const incoming = await res.json();
@@ -66,7 +100,6 @@
     async function completeTask(task) {
         const taskId = task.id || task._id;
 
-        // 1. Optimistic UI Update
         allTasks = allTasks.map(t => {
             const tId = t.id || t._id;
             if (tId === taskId) {
@@ -76,7 +109,6 @@
         });
         updateAllProcessors();
 
-        // 2. API Call
         try {
             await fetch(MANAGE_URL, {
                 method: 'POST',
@@ -92,8 +124,206 @@
             });
         } catch (e) {
             console.error("Failed to complete task:", e);
-            // Optional: Revert on failure
         }
+    }
+
+    // --- CHAT UI HELPERS ---
+    async function scrollToBottom() {
+        await tick();
+        if (chatContainer) {
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+    }
+
+    // NEW: Clear the chat history from local memory
+    function clearChatContext() {
+        chatHistory = [];
+        showNotification("Conversation context cleared.");
+    }
+
+    // --- UNIVERSAL 3-TIER MICROPHONE LOGIC ---
+    async function toggleListening() {
+        if (isListening) {
+            isListening = false;
+            if (Capacitor.isNativePlatform()) {
+                try { await SpeechRecognition.stop(); } catch(e) { console.error(e); }
+            } else if (webRecognition) {
+                webRecognition.stop();
+            } else if (isRecordingAudio && mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
+            return;
+        }
+
+        if (Capacitor.isNativePlatform()) {
+            isListening = true;
+            try {
+                const permission = await SpeechRecognition.hasPermission();
+                if (!permission.permission) {
+                    await SpeechRecognition.requestPermission();
+                }
+
+                const result = await SpeechRecognition.start({
+                    language: 'en-US',
+                    maxResults: 1,
+                    prompt: 'What is on your mind?',
+                    partialResults: false,
+                    popup: true
+                });
+
+                if (result && result.matches && result.matches.length > 0) {
+                    thoughtText = result.matches[0];
+                    submitThought(); // Auto-submit native speech
+                }
+            } catch (err) {
+                console.error("Native speech error:", err);
+            } finally {
+                isListening = false;
+            }
+        } else if (window.SpeechRecognition || window.webkitSpeechRecognition) {
+            const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (SpeechRecognitionAPI) {
+                webRecognition = new SpeechRecognitionAPI();
+                webRecognition.continuous = false;
+                webRecognition.interimResults = true;
+
+                webRecognition.onstart = () => { isListening = true; };
+                
+                webRecognition.onresult = (event) => {
+                    let transcript = '';
+                    for (let i = event.resultIndex; i < event.results.length; ++i) {
+                        transcript += event.results[i][0].transcript;
+                    }
+                    thoughtText = transcript;
+                };
+
+                webRecognition.onerror = (event) => {
+                    console.error('Speech error:', event.error);
+                    isListening = false;
+                };
+
+                webRecognition.onend = () => {
+                    isListening = false;
+                    if (thoughtText.trim()) submitThought(); // Auto-submit web speech
+                };
+
+                webRecognition.start();
+            }
+        } else if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+                
+                mediaRecorder.onstop = () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    const reader = new FileReader();
+                    reader.readAsDataURL(audioBlob);
+                    reader.onloadend = () => {
+                        const base64Audio = reader.result;
+                        submitThought(null, base64Audio); 
+                    };
+                    stream.getTracks().forEach(t => t.stop()); 
+                    isRecordingAudio = false;
+                };
+
+                mediaRecorder.start();
+                isListening = true;
+                isRecordingAudio = true;
+            } catch (e) {
+                console.error(e);
+                showNotification("Microphone permission denied.");
+            }
+        } else {
+            showNotification("Voice input is not supported on this device.");
+        }
+    }
+
+    // --- THE NEW SMART CHAT ROUTER ---
+    async function submitThought(manualText = null, audioBase64 = null) {
+        const currentThought = manualText || thoughtText;
+        if (!currentThought.trim() && !audioBase64) return;
+
+        thoughtText = ''; // Clear immediately
+        const msgId = Date.now();
+
+        if (audioBase64) {
+            // STEP 1: Handle Audio (Tier 3 Fallback)
+            chatHistory = [...chatHistory, { 
+                id: msgId, role: 'user', type: 'audio', audioUrl: audioBase64, content: 'Transcribing audio...' 
+            }];
+            scrollToBottom();
+
+            try {
+                const mimeType = audioBase64.split(';')[0].split(':')[1] || 'audio/webm';
+                const res = await fetch(TRANSCRIBE_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: $currentUser.id, audio: audioBase64, mimeType })
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    const transcribedText = data.text || "(Inaudible)";
+                    
+                    // Update bubble with actual text
+                    chatHistory = chatHistory.map(msg => msg.id === msgId ? { ...msg, content: transcribedText } : msg);
+                    scrollToBottom();
+
+                    // STEP 2: Send transcribed text to Gemma
+                    sendToBrain(transcribedText);
+                } else {
+                    throw new Error("Transcription Failed");
+                }
+            } catch (e) {
+                console.error(e);
+                chatHistory = chatHistory.map(msg => msg.id === msgId ? { ...msg, content: "⚠️ Could not transcribe audio." } : msg);
+            }
+        } else {
+            // STEP 1: Handle Direct Text (Chrome/Native/Typing)
+            chatHistory = [...chatHistory, { id: msgId, role: 'user', type: 'text', content: currentThought }];
+            scrollToBottom();
+            sendToBrain(currentThought);
+        }
+    }
+
+    // --- THE BRAIN HANDLER (Now with memory context!) ---
+    function sendToBrain(text) {
+        if (!text || text.trim() === '' || text.includes('⚠️')) return;
+
+        isAiThinking = true;
+        scrollToBottom();
+
+        // Extract clean history to send to n8n
+        const historyPayload = chatHistory.map(msg => ({
+            role: msg.role,
+            content: msg.content
+        }));
+
+        fetch(THOUGHT_CATCHER_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                userId: $currentUser.id, 
+                thought: text,
+                history: historyPayload // NEW: Send the memory array!
+            })
+        })
+        .then(res => res.json())
+        .then(data => {
+            isAiThinking = false;
+            chatHistory = [...chatHistory, { id: Date.now(), role: 'bot', type: 'text', content: data.reply || "Done!" }];
+            scrollToBottom();
+            if (data.type === 'create_task') refreshDashboard();
+        })
+        .catch(e => {
+            console.error(e);
+            isAiThinking = false;
+            chatHistory = [...chatHistory, { id: Date.now(), role: 'bot', type: 'text', content: "I'm resting right now. Please try again later." }];
+            scrollToBottom();
+        });
     }
 
     // --- DATA PROCESSORS ---
@@ -107,14 +337,13 @@
     function processWidgets(tasks) {
         const active = tasks.filter(t => t.status !== 'completed');
 
-        // Sorted by TIME (Deadline first, then creation time)
         priorityTasks = active
             .sort((a, b) => {
                 const timeA = a.deadline ? new Date(a.deadline) : new Date(a.timestamp || 0);
                 const timeB = b.deadline ? new Date(b.deadline) : new Date(b.timestamp || 0);
                 return timeA - timeB;
             })
-            .slice(0, 8); // Showing a bit more since it's dynamic now
+            .slice(0, 8);
 
         upcomingDeadlines = active
             .filter(t => t.deadline)
@@ -189,7 +418,7 @@
     }
 
     onMount(async () => {
-        showWelcomeNotification = true;
+        showNotification("Welcome back!");
         refreshDashboard();
         pollInterval = setInterval(refreshDashboard, POLL_INTERVAL);
     });
@@ -199,8 +428,8 @@
     });
 </script>
 
-{#if showWelcomeNotification}
-    <Notification message="Welcome back!" />
+{#if notificationMessage}
+    {#key notificationKey}<Notification message={notificationMessage} />{/key}
 {/if}
 
 <header class="top-header">
@@ -212,7 +441,9 @@
             <i class="bx bx-search"></i>
             <input type="text" placeholder="Search..." aria-label="Search" />
         </div>
-        <div class="avatar">FS</div>
+        <div class="avatar">
+            {$currentUser?.name ? $currentUser.name.substring(0, 2).toUpperCase() : 'ME'}
+        </div>
     </div>
 </header>
 
@@ -244,14 +475,58 @@
         </div>
     </div>
 
-    <div class="input-wrapper">
-        <i class="bx bx-microphone mic-icon"></i>
-        <input
-            type="text"
-            placeholder="Type or speak to capture a thought..."
-            aria-label="Capture thought"
-        />
-        <button class="send-btn" aria-label="Send thought"><i class="bx bx-send"></i></button>
+    <!-- NEW: SMART ASSISTANT CHAT WRAPPER -->
+    <div class="smart-assistant-wrapper">
+        <!-- Chat History Window (Only shows if there are messages) -->
+        {#if chatHistory.length > 0 || isAiThinking}
+            <div class="chat-history scroll-area" bind:this={chatContainer}>
+                
+                <!-- Chat Context Header with Clear Button -->
+                <div class="chat-header-bar">
+                    <span class="chat-header-title"><i class='bx bx-brain'></i> AI Assistant</span>
+                    <button class="clear-chat-btn" onclick={clearChatContext} title="Reset Context">
+                        <i class="bx bx-broom"></i> <span>Clear</span>
+                    </button>
+                </div>
+
+                {#each chatHistory as msg (msg.id)}
+                    <div class="chat-bubble {msg.role}">
+                        {#if msg.type === 'audio'}
+                            <audio controls src={msg.audioUrl} class="audio-player"></audio>
+                            <p class="transcription-text">"{msg.content}"</p>
+                        {:else}
+                            <p class="message-text">{msg.content}</p>
+                        {/if}
+                    </div>
+                {/each}
+                
+                {#if isAiThinking}
+                    <div class="chat-bubble bot typing-bubble">
+                        <div class="dot"></div>
+                        <div class="dot"></div>
+                        <div class="dot"></div>
+                    </div>
+                {/if}
+            </div>
+        {/if}
+
+        <!-- The Input Box -->
+        <div class="input-wrapper">
+            <button class="mic-btn" class:active={isListening} onclick={toggleListening} aria-label="Voice input">
+                <i class="bx" class:bx-microphone={!isListening} class:bx-microphone-off={isListening} class:bx-flashing={isListening}></i>
+            </button>
+            <input
+                type="text"
+                placeholder={isRecordingAudio ? "Recording audio... Tap mic to send!" : isListening ? "Listening..." : "Type or speak to capture a thought..."}
+                aria-label="Capture thought"
+                bind:value={thoughtText}
+                onkeydown={(e) => e.key === 'Enter' && submitThought()}
+                disabled={isRecordingAudio}
+            />
+            <button class="send-btn" aria-label="Send thought" onclick={() => submitThought()} disabled={(!thoughtText.trim() && !isRecordingAudio) || (isListening && !isRecordingAudio)}>
+                <i class="bx bx-send"></i>
+            </button>
+        </div>
     </div>
 
     <div class="widget-grid">
@@ -266,7 +541,7 @@
                 {/if}
                 {#each priorityTasks as task (task.id || task._id)}
                     <div class="task-item" transition:slide|local>
-                        <button class="complete-btn" on:click={() => completeTask(task)} title="Mark as complete">
+                        <button class="complete-btn" onclick={() => completeTask(task)} title="Mark as complete">
                             <div class="circle"></div>
                         </button>
                         <span class="task-text">{task.title}</span>
@@ -282,7 +557,7 @@
         </div>
 
         <div class="side-widgets">
-            <button class="widget notification-widget clickable" on:click={() => showNotifModal = true}>
+            <button class="widget notification-widget clickable" onclick={() => showNotifModal = true}>
                 <div class="widget-header">
                     <h3>Recent Notifications</h3>
                     <i class="bx bx-bell" style="color: var(--accent-orange)"></i>
@@ -303,7 +578,7 @@
                 </div>
             </button>
 
-            <button class="widget habits-widget clickable" on:click={() => showHabitModal = true}>
+            <button class="widget habits-widget clickable" onclick={() => showHabitModal = true}>
                 <div class="widget-header">
                     <h3>Habit Breakdown</h3>
                     <i class="bx bx-pie-chart-alt-2" style="color: var(--accent-purple)"></i>
@@ -350,18 +625,18 @@
 <!-- --- MODALS --- -->
 
 {#if showNotifModal}
-    <div class="modal-backdrop" on:click={() => { showNotifModal = false; selectedNotifId = null; }}>
-        <div class="modal-content" on:click|stopPropagation>
+    <div class="modal-backdrop" onclick={() => { showNotifModal = false; selectedNotifId = null; }}>
+        <div class="modal-content" onclick={(e) => e.stopPropagation()}>
             <div class="modal-header">
                 <h3><i class="bx bx-bell"></i> Recent Alerts</h3>
-                <button class="close-btn" on:click={() => { showNotifModal = false; selectedNotifId = null; }}><i class="bx bx-x"></i></button>
+                <button class="close-btn" onclick={() => { showNotifModal = false; selectedNotifId = null; }}><i class="bx bx-x"></i></button>
             </div>
 
             <div class="modal-body notif-modal-body">
                 <div class="notif-accordion">
                     {#each notifications as notif}
                         <div class="notif-group" class:expanded={selectedNotifId === notif.id}>
-                            <button class="notif-trigger" on:click={() => toggleNotif(notif.id)}>
+                            <button class="notif-trigger" onclick={() => toggleNotif(notif.id)}>
                                 <div class="notif-dot {notif.isHighlight ? '' : 'silent'}"></div>
                                 <div class="notif-main">
                                     <p class="notif-title">{notif.title}</p>
@@ -411,11 +686,11 @@
 {/if}
 
 {#if showHabitModal}
-    <div class="modal-backdrop" on:click={() => showHabitModal = false}>
-        <div class="modal-content habit-modal" on:click|stopPropagation>
+    <div class="modal-backdrop" onclick={() => showHabitModal = false}>
+        <div class="modal-content habit-modal" onclick={(e) => e.stopPropagation()}>
             <div class="modal-header">
                 <h3><i class="bx bx-pie-chart-alt-2"></i> Habit Breakdown</h3>
-                <button class="close-btn" on:click={() => showHabitModal = false}><i class="bx bx-x"></i></button>
+                <button class="close-btn" onclick={() => showHabitModal = false}><i class="bx bx-x"></i></button>
             </div>
             <div class="modal-body habit-body">
                 <div class="donut large" style="background: {donutGradient}">
@@ -493,16 +768,179 @@
     .green-text { color: var(--accent-green); }
     .unit { font-size: 0.875rem; font-weight: 400; color: var(--text-gray); }
 
-    /* --- INPUT --- */
-    .input-wrapper { position: relative; margin-bottom: 1.5rem; }
+    /* --- NEW: SMART ASSISTANT CHAT UI --- */
+    .smart-assistant-wrapper {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        margin-bottom: 1.5rem;
+        width: 100%;
+    }
+    
+    .chat-history {
+        max-height: 60vh;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 0.875rem;
+        padding: 1.25rem;
+        background: #11121a; /* Slightly darker than card-bg for depth */
+        border: 1px solid var(--border-color);
+        border-radius: 1rem;
+        box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.2);
+        scrollbar-width: thin;
+        scrollbar-color: var(--border-color) transparent;
+    }
+    
+    .chat-history::-webkit-scrollbar { width: 6px; }
+    .chat-history::-webkit-scrollbar-thumb { background-color: var(--border-color); border-radius: 3px; }
+
+    .chat-header-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    
+    .chat-header-title {
+        font-size: 0.75rem;
+        color: var(--text-gray);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-weight: 600;
+    }
+
+    .clear-chat-btn {
+        background: rgba(255,255,255,0.05);
+        border: 1px solid var(--border-color);
+        color: var(--text-gray);
+        font-size: 1rem;
+        padding: 0.3rem 0.6rem;
+        border-radius: 0.4rem;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+    
+    .clear-chat-btn:hover {
+        color: var(--accent-red);
+        background: rgba(239, 68, 68, 0.1);
+        border-color: rgba(239, 68, 68, 0.3);
+    }
+    
+    .clear-chat-btn span {
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .chat-bubble {
+        max-width: 85%;
+        padding: 0.75rem 1rem;
+        border-radius: 1rem;
+        font-size: 0.95rem;
+        line-height: 1.4;
+        position: relative;
+        word-wrap: break-word;
+    }
+    
+    .chat-bubble.user {
+        align-self: flex-end;
+        background: linear-gradient(135deg, var(--accent-purple), var(--hover-purple));
+        color: white;
+        border-bottom-right-radius: 0.25rem;
+        box-shadow: 0 4px 6px -1px rgba(99, 102, 241, 0.3);
+    }
+    
+    .chat-bubble.bot {
+        align-self: flex-start;
+        background: #2a2c41; /* Distinct bot color */
+        color: #e2e8f0;
+        border-bottom-left-radius: 0.25rem;
+        border: 1px solid var(--border-color);
+    }
+
+    .message-text { margin: 0; }
+
+    /* Audio Bubble Styling */
+    .audio-player {
+        height: 36px;
+        width: 220px;
+        margin-bottom: 0.5rem;
+        border-radius: 18px;
+        outline: none;
+    }
+    
+    /* Native audio element restyling trick for webkit */
+    .audio-player::-webkit-media-controls-panel {
+        background-color: rgba(255, 255, 255, 0.2);
+    }
+    
+    .transcription-text {
+        font-size: 0.85rem;
+        opacity: 0.9;
+        margin: 0;
+        font-style: italic;
+        border-top: 1px solid rgba(255, 255, 255, 0.2);
+        padding-top: 0.4rem;
+    }
+
+    /* Jumping Dots Typing Indicator */
+    .typing-bubble {
+        display: flex;
+        gap: 0.3rem;
+        align-items: center;
+        padding: 1rem 1.25rem;
+    }
+    
+    .dot {
+        width: 6px;
+        height: 6px;
+        background: #9ca3af;
+        border-radius: 50%;
+        animation: bounce 1.4s infinite ease-in-out both;
+    }
+    
+    .dot:nth-child(1) { animation-delay: -0.32s; }
+    .dot:nth-child(2) { animation-delay: -0.16s; }
+    
+    @keyframes bounce {
+        0%, 80%, 100% { transform: scale(0); opacity: 0.4; }
+        40% { transform: scale(1); opacity: 1; }
+    }
+
+    /* Input Box styling */
+    .input-wrapper { position: relative; }
     .input-wrapper input {
         width: 100%; background-color: var(--card-bg); border: 1px solid var(--border-color);
-        padding: 0.875rem 3rem; border-radius: 0.75rem; color: var(--text-white); outline: none; font-size: 1rem;
-        transition: border-color 0.2s;
+        padding: 0.875rem 3.5rem 0.875rem 3rem;
+        border-radius: 0.75rem; color: var(--text-white); outline: none; font-size: 1rem;
+        transition: border-color 0.2s; box-sizing: border-box;
     }
     .input-wrapper input:focus { border-color: var(--accent-purple); }
-    .mic-icon { position: absolute; left: 1rem; top: 1rem; color: var(--text-gray); font-size: 1.2rem; }
-    .send-btn { position: absolute; right: 0.5rem; top: 0.5rem; background-color: var(--accent-purple); border: none; color: white; padding: 0.35rem 0.5rem; border-radius: 0.5rem; cursor: pointer; }
+    .input-wrapper input:disabled { opacity: 0.7; color: var(--accent-red); font-weight: 500; }
+    
+    .mic-btn { 
+        position: absolute; left: 0.5rem; top: 0.45rem; background: none; border: none; 
+        color: var(--text-gray); font-size: 1.4rem; padding: 0.4rem; cursor: pointer; 
+        transition: color 0.2s; z-index: 2;
+    }
+    .mic-btn:hover { color: var(--accent-purple); }
+    .mic-btn.active { color: var(--accent-red); }
+    
+    .send-btn { 
+        position: absolute; right: 0.5rem; top: 0.5rem; background-color: var(--accent-purple); 
+        border: none; color: white; padding: 0.5rem; border-radius: 0.5rem; cursor: pointer; 
+        display: flex; align-items: center; justify-content: center; transition: opacity 0.2s;
+    }
+    .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
 
     /* --- WIDGETS --- */
     .widget-grid { display: grid; grid-template-columns: 1fr; gap: 1.5rem; align-items: start; }
@@ -519,7 +957,7 @@
     .notif-time { color: var(--text-gray); font-size: 0.7rem; margin: 0.2rem 0 0 0; }
 
     /* TASKS WIDGET (DYNAMIC SIZE) */
-    .tasks-widget { min-height: auto; } /* Removed fixed 400px */
+    .tasks-widget { min-height: auto; }
     .task-item {
         display: flex; align-items: center; padding: 0.875rem; border-radius: 0.5rem; margin-bottom: 0.5rem;
         background: rgba(255,255,255,0.02); border: 1px solid transparent; transition: all 0.2s;
@@ -628,5 +1066,3 @@
         .detail-row { grid-template-columns: 1fr; }
     }
 </style>
-
-<!-- Force Deploy -->
