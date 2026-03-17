@@ -6,7 +6,6 @@ const isVercel = process.env.VERCEL === '1';
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
-    // --- NEW: THE WARNING SILENCER ---
     // This catches all harmless Svelte 4/5 warnings and throws them away 
     // so Vercel's strict CI mode doesn't panic and crash the build.
     onwarn: (warning, handler) => {
@@ -29,6 +28,12 @@ const config = {
                 precompress: false,
                 strict: false
             }),
+            
+        // --- NEW: THE 404 SILENCER ---
+        // Stops Vercel from crashing if it can't find a linked asset (like favicon.png)
+        prerender: {
+            handleHttpError: 'warn'
+        },
         
         // Keep the CSRF fix so the phone can talk to the API
         csrf: {
