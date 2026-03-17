@@ -29,10 +29,9 @@ const config = {
                 strict: false
             }),
             
-        // --- NEW: THE 404 SILENCER ---
-        // Stops Vercel from crashing if it can't find a linked asset (like favicon.png)
         prerender: {
-            handleHttpError: 'warn'
+            handleHttpError: 'warn',
+            handleMissingId: 'warn' // <--- NEW: Stops Vercel crashing over missing #features links
         },
         
         // Keep the CSRF fix so the phone can talk to the API
