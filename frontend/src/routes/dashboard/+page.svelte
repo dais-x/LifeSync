@@ -289,27 +289,17 @@
         }
     }
 
-    // --- THE BRAIN HANDLER (Now with memory context!) ---
+    // --- THE BRAIN HANDLER ---
     function sendToBrain(text) {
         if (!text || text.trim() === '' || text.includes('⚠️')) return;
 
         isAiThinking = true;
         scrollToBottom();
 
-        // Extract clean history to send to n8n
-        const historyPayload = chatHistory.map(msg => ({
-            role: msg.role,
-            content: msg.content
-        }));
-
         fetch(THOUGHT_CATCHER_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                userId: $currentUser.id, 
-                thought: text,
-                history: historyPayload // NEW: Send the memory array!
-            })
+            body: JSON.stringify({ userId: $currentUser.id, thought: text })
         })
         .then(res => res.json())
         .then(data => {
@@ -483,8 +473,8 @@
                 
                 <!-- Chat Context Header with Clear Button -->
                 <div class="chat-header-bar">
-                    <span class="chat-header-title"><i class='bx bx-brain'></i> AI Assistant</span>
-                    <button class="clear-chat-btn" onclick={clearChatContext} title="Reset Context">
+                    <span class="chat-header-title"><i class='bx bx-brain'></i> AI Assistant Context</span>
+                    <button class="clear-chat-btn" onclick={clearChatContext} title="Reset Context" aria-label="Clear Context">
                         <i class="bx bx-broom"></i> <span>Clear</span>
                     </button>
                 </div>
@@ -542,7 +532,7 @@
                 {#each priorityTasks as task (task.id || task._id)}
                     <div class="task-item" transition:slide|local>
                         <button class="complete-btn" onclick={() => completeTask(task)} title="Mark as complete">
-                            <div class="circle"></div>
+                            <span class="circle"></span>
                         </button>
                         <span class="task-text">{task.title}</span>
                         <div class="task-meta-info">
@@ -557,7 +547,9 @@
         </div>
 
         <div class="side-widgets">
-            <button class="widget notification-widget clickable" onclick={() => showNotifModal = true}>
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div role="button" tabindex="0" class="widget notification-widget clickable" onclick={() => showNotifModal = true} onkeydown={(e) => { if(e.key === 'Enter') showNotifModal = true; }}>
                 <div class="widget-header">
                     <h3>Recent Notifications</h3>
                     <i class="bx bx-bell" style="color: var(--accent-orange)"></i>
@@ -568,7 +560,7 @@
                     {/if}
                     {#each notifications.slice(0, 5) as notif (notif.id)}
                         <div class="notif-card">
-                            <div class="notif-dot {notif.isHighlight ? '' : 'silent'}"></div>
+                            <span class="notif-dot {notif.isHighlight ? '' : 'silent'}"></span>
                             <div class="notif-content">
                                 <p class="notif-title">{notif.title}</p>
                                 <p class="notif-time">{notif.time} • {notif.category}</p>
@@ -576,9 +568,11 @@
                         </div>
                     {/each}
                 </div>
-            </button>
+            </div>
 
-            <button class="widget habits-widget clickable" onclick={() => showHabitModal = true}>
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div role="button" tabindex="0" class="widget habits-widget clickable" onclick={() => showHabitModal = true} onkeydown={(e) => { if(e.key === 'Enter') showHabitModal = true; }}>
                 <div class="widget-header">
                     <h3>Habit Breakdown</h3>
                     <i class="bx bx-pie-chart-alt-2" style="color: var(--accent-purple)"></i>
@@ -603,7 +597,7 @@
                         </div>
                     </div>
                 {/if}
-            </button>
+            </div>
 
             <div class="widget deadlines-widget">
                 <h3>Deadlines</h3>
@@ -625,46 +619,52 @@
 <!-- --- MODALS --- -->
 
 {#if showNotifModal}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="modal-backdrop" onclick={() => { showNotifModal = false; selectedNotifId = null; }}>
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="modal-content" onclick={(e) => e.stopPropagation()}>
             <div class="modal-header">
                 <h3><i class="bx bx-bell"></i> Recent Alerts</h3>
-                <button class="close-btn" onclick={() => { showNotifModal = false; selectedNotifId = null; }}><i class="bx bx-x"></i></button>
+                <button class="close-btn" onclick={() => { showNotifModal = false; selectedNotifId = null; }} aria-label="Close"><i class="bx bx-x"></i></button>
             </div>
 
             <div class="modal-body notif-modal-body">
                 <div class="notif-accordion">
                     {#each notifications as notif}
                         <div class="notif-group" class:expanded={selectedNotifId === notif.id}>
-                            <button class="notif-trigger" onclick={() => toggleNotif(notif.id)}>
-                                <div class="notif-dot {notif.isHighlight ? '' : 'silent'}"></div>
+                            <!-- svelte-ignore a11y_click_events_have_key_events -->
+                            <!-- svelte-ignore a11y_no_static_element_interactions -->
+                            <div role="button" tabindex="0" class="notif-trigger" onclick={() => toggleNotif(notif.id)} onkeydown={(e) => { if(e.key === 'Enter') toggleNotif(notif.id); }}>
+                                <span class="notif-dot {notif.isHighlight ? '' : 'silent'}"></span>
                                 <div class="notif-main">
                                     <p class="notif-title">{notif.title}</p>
                                     <p class="notif-meta">{notif.time} • {notif.category}</p>
                                 </div>
                                 <i class="bx bx-chevron-down chevron"></i>
-                            </button>
+                            </div>
 
                             {#if selectedNotifId === notif.id}
                                 <div class="notif-details" transition:slide={{ duration: 250 }}>
                                     <div class="details-inner">
                                         <div class="detail-row">
                                             <div class="detail-col">
-                                                <label>Task Status</label>
+                                                <span class="detail-label">Task Status</span>
                                                 <p>{notif.status.replace('_', ' ')}</p>
                                             </div>
                                             <div class="detail-col">
-                                                <label>Priority Level</label>
+                                                <span class="detail-label">Priority Level</span>
                                                 <span class="tag {notif.priority}">{notif.priority}</span>
                                             </div>
                                         </div>
                                         <div class="detail-row">
                                             <div class="detail-col">
-                                                <label>Source Category</label>
+                                                <span class="detail-label">Source Category</span>
                                                 <p>{notif.category}</p>
                                             </div>
                                             <div class="detail-col">
-                                                <label>Received At</label>
+                                                <span class="detail-label">Received At</span>
                                                 <p>{notif.fullDate}</p>
                                             </div>
                                         </div>
@@ -686,11 +686,15 @@
 {/if}
 
 {#if showHabitModal}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="modal-backdrop" onclick={() => showHabitModal = false}>
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="modal-content habit-modal" onclick={(e) => e.stopPropagation()}>
             <div class="modal-header">
                 <h3><i class="bx bx-pie-chart-alt-2"></i> Habit Breakdown</h3>
-                <button class="close-btn" onclick={() => showHabitModal = false}><i class="bx bx-x"></i></button>
+                <button class="close-btn" onclick={() => showHabitModal = false} aria-label="Close"><i class="bx bx-x"></i></button>
             </div>
             <div class="modal-body habit-body">
                 <div class="donut large" style="background: {donutGradient}">
@@ -900,6 +904,7 @@
     }
     
     .dot {
+        display: inline-block;
         width: 6px;
         height: 6px;
         background: #9ca3af;
@@ -951,7 +956,7 @@
     .widget-header h3 { margin: 0; font-size: 1rem; color: var(--text-white); }
 
     .notif-card { display: flex; align-items: center; padding: 0.75rem; background: rgba(255, 255, 255, 0.03); border-radius: 0.5rem; margin-bottom: 0.5rem; border-left: 3px solid var(--accent-orange); width: 100%; }
-    .notif-dot { width: 0.5rem; height: 0.5rem; background: var(--accent-orange); border-radius: 50%; margin-right: 0.75rem; flex-shrink: 0; }
+    .notif-dot { display: inline-block; width: 0.5rem; height: 0.5rem; background: var(--accent-orange); border-radius: 50%; margin-right: 0.75rem; flex-shrink: 0; }
     .notif-dot.silent { background: var(--text-gray); }
     .notif-title { color: var(--text-white); font-size: 0.85rem; font-weight: 500; margin: 0; }
     .notif-time { color: var(--text-gray); font-size: 0.7rem; margin: 0.2rem 0 0 0; }
@@ -966,7 +971,7 @@
     .task-text { flex: 1; font-size: 0.875rem; color: #d1d5db; margin: 0 0.75rem; }
 
     .complete-btn { background: none; border: none; padding: 0; cursor: pointer; display: flex; align-items: center; }
-    .circle { width: 1.25rem; height: 1.25rem; border: 2px solid #4b5563; border-radius: 50%; transition: all 0.2s; }
+    .circle { display: inline-block; width: 1.25rem; height: 1.25rem; border: 2px solid #4b5563; border-radius: 50%; transition: all 0.2s; }
     .complete-btn:hover .circle { border-color: var(--accent-green); background: rgba(34, 197, 94, 0.1); }
 
     .task-meta-info { display: flex; align-items: center; gap: 0.75rem; }
@@ -987,7 +992,7 @@
 
     .legend { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.75rem; }
     .legend-item { display: flex; align-items: center; gap: 0.4rem; color: var(--text-gray); }
-    .dot { width: 8px; height: 8px; border-radius: 2px; }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; }
     .l-text { color: white; }
     .l-pct { margin-left: auto; color: var(--text-gray); }
 
@@ -1034,7 +1039,7 @@
     .notif-details { border-top: 1px solid rgba(255, 255, 255, 0.05); }
     .details-inner { padding: 1.25rem; display: flex; flex-direction: column; gap: 1.25rem; }
     .detail-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-    .detail-col label { display: block; font-size: 0.65rem; text-transform: uppercase; color: var(--text-gray); margin-bottom: 0.4rem; letter-spacing: 0.05em; }
+    .detail-col label, .detail-col .detail-label { display: block; font-size: 0.65rem; text-transform: uppercase; color: var(--text-gray); margin-bottom: 0.4rem; letter-spacing: 0.05em; }
     .detail-col p { margin: 0; color: white; font-size: 0.9rem; font-weight: 500; }
 
     .empty-notif { text-align: center; padding: 4rem 2rem; color: var(--text-gray); }
