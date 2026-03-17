@@ -1,11 +1,11 @@
 {
-  "appId": "com.Lifesync.app",
-  "appName": "Lifesync",
+  "appId": "com.lifesync.app",
+  "appName": "LifeSync",
   "webDir": "build",
+  "bundledWebRuntime": false,
   "plugins": {
-    "StatusBar": {
-      "style": "DARK",
-      "backgroundColor": "#0b0c15"
+    "CapacitorHttp": {
+      "enabled": true
     }
   }
 }

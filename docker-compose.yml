@@ -40,7 +40,7 @@ services:
       - WEBHOOK_URL=${WEBHOOK_URL}
       - MONGODB_URI=${MONGODB_URI}
       - GENERIC_TIMEZONE=Asia/Taipei
-      - N8N_CORS_ALLOWED_ORIGINS=http://localhost:5173
+      - N8N_CORS_ALLOWED_ORIGINS=*
     volumes:
       - n8n_storage:/home/node/.n8n
     networks:
