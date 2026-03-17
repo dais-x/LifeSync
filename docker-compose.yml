@@ -40,7 +40,7 @@ services:
       - WEBHOOK_URL=${WEBHOOK_URL}
       - MONGODB_URI=${MONGODB_URI}
       - GENERIC_TIMEZONE=Asia/Taipei
-      - N8N_CORS_ALLOWED_ORIGINS=*
+      - N8N_CORS_ALLOWED_ORIGINS=* # Allowing phone and web origins
     volumes:
       - n8n_storage:/home/node/.n8n
     networks:
@@ -81,7 +81,6 @@ services:
       - lifesync_net
     restart: always
 
-# Define the persistent storage volumes
 volumes:
   ollama_storage:
   n8n_storage:
