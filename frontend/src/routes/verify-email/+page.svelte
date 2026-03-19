@@ -76,7 +76,7 @@
 
             status = 'success';
             setTimeout(() => {
-                goto('/dashboard'); // Proceed to dashboard after successful verification
+                goto('/signup/details'); // ROUTED TO ONBOARDING INSTEAD OF DASHBOARD
             }, 1500);
         } catch (e) {
             status = 'error';

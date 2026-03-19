@@ -1,7 +1,10 @@
 <script>
     import { goto } from '$app/navigation';
-    import { userFormData } from '$lib/stores';
+    import { userFormData, currentUser } from '$lib/stores'; // NEW: Imported currentUser
+    import { PUBLIC_API_URL } from '$env/static/public'; // NEW: Imported API URL
+
     let step = 1;
+    let isSaving = false; // NEW: Prevents double-clicks during saving
 
     // formData is now the store itself, accessed via $userFormData
     // No need to redeclare local formData here.
@@ -100,14 +103,18 @@
 
     let showCompletionPopup = false;
 
-    function handleFinish() {
+    // --- NEW: UPDATED FINISH FUNCTION ---
+    async function handleFinish() {
         console.log('handleFinish called');
-        if (!validateStep(step)) { // Add validation check
-            return; // Stop if validation fails
+        if (!validateStep(step)) { 
+            return; 
         }
+
+        isSaving = true;
+
         // Finalize digital_wellbeing if 'other' is selected
         if ($userFormData.digital_wellbeing.includes('other')) {
-            $userFormData.update(currentData => {
+            userFormData.update(currentData => {
                 const updatedWellbeing = currentData.digital_wellbeing.map(item =>
                     item === 'other' ? otherWellbeingText : item
                 );
@@ -115,11 +122,59 @@
             });
         }
 
-        showCompletionPopup = true;
-        console.log('showCompletionPopup set to true, navigating to /dashboard in 3 seconds');
-        setTimeout(() => {
-            goto('/dashboard');
-        }, 3000); // 3-second delay
+        try {
+            // 1. Get the user ID from the global store (or fallback to local storage)
+            const actualUserId = $currentUser?.id || $currentUser?._id || JSON.parse(localStorage.getItem('user') || '{}').id || JSON.parse(localStorage.getItem('user') || '{}')._id;
+
+            if (!actualUserId) {
+                throw new Error("Could not find user session. Please try logging in again.");
+            }
+
+            const payload = {
+                userId: actualUserId,
+                details: $userFormData
+            };
+
+            // 2. Send it to our new backend route
+            const baseUrl = PUBLIC_API_URL && PUBLIC_API_URL !== 'undefined' ? PUBLIC_API_URL : '';
+            const response = await fetch(`${baseUrl}/api/user/details`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                const responseText = await response.text();
+                let errData;
+                try {
+                    errData = JSON.parse(responseText);
+                } catch (parseError) {
+                    console.error("RAW HTML SERVER RESPONSE:", responseText);
+                    throw new Error(`Backend Error ${response.status}: Check your Pop!_OS terminal to see why it crashed!`);
+                }
+                throw new Error(errData.error || 'Failed to save profile data');
+            }
+
+            // 3. Update the global user store so the Gatekeeper knows they finished onboarding!
+            if ($currentUser) {
+                currentUser.update(user => ({ ...user, ...$userFormData }));
+            }
+
+            showCompletionPopup = true;
+            console.log('showCompletionPopup set to true, navigating to /dashboard in 3 seconds');
+            
+            setTimeout(() => {
+                goto('/dashboard');
+            }, 3000); 
+
+        } catch (error) {
+            console.error("Save Error:", error);
+            alert('Error: ' + error.message);
+        } finally {
+            isSaving = false;
+        }
     }
 </script>
 
@@ -306,12 +361,14 @@
 
         <div class="navigation-buttons">
             {#if step > 1}
-                <button class="nav-btn" on:click={prevStep}>Back</button>
+                <button class="nav-btn" on:click={prevStep} disabled={isSaving}>Back</button>
             {/if}
             {#if step < totalSteps}
-                <button class="nav-btn" on:click={nextStep}>Next</button>
+                <button class="nav-btn" on:click={nextStep} disabled={isSaving}>Next</button>
             {:else}
-                <button class="nav-btn" on:click={handleFinish}>Finish</button>
+                <button class="nav-btn" on:click={handleFinish} disabled={isSaving}>
+                    {isSaving ? 'Saving...' : 'Finish'}
+                </button>
             {/if}
         </div>
     </div>
@@ -468,6 +525,11 @@
         cursor: pointer;
         font-size: 1rem;
         margin-left: auto; /* Pushes the "Next" button to the right if Back isn't present */
+        transition: opacity 0.2s;
+    }
+    .nav-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
     }
     .navigation-buttons button:first-child:not(:last-child) {
         margin-left: 0;

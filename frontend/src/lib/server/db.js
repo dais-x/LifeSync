@@ -28,3 +28,4 @@ export async function getCollection(name) {
 export const users = () => getCollection('users');
 export const tokens = () => getCollection('tokens');
 export const sessions = () => getCollection('sessions');
+export const userDetails = () => getCollection('user_details');
