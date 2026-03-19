@@ -1,17 +1,15 @@
 import { Resend } from 'resend';
-import { RESEND_API_KEY, RESEND_FROM_EMAIL, RESEND_TO_OVERRIDE } from '$env/static/private';
+import { RESEND_API_KEY, RESEND_FROM_EMAIL } from '$env/static/private';
 
 const resend = new Resend(RESEND_API_KEY);
 
 export async function sendEmail({ to, subject, html }) {
-    // If testing locally, RESEND_TO_OVERRIDE forces emails to your verified address
-    const recipient = RESEND_TO_OVERRIDE || to;
     const sender = RESEND_FROM_EMAIL || 'LifeSync <onboarding@resend.dev>';
 
     try {
         const payload = {
             from: sender,
-            to: recipient,
+            to: to, // Directly using the user's actual email address now
             subject: subject,
             html: html // Resend strictly requires html, text, or a react component
         };
