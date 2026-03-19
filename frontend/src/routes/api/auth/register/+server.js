@@ -12,7 +12,7 @@ export async function POST({ request }) {
             return json({ error: 'Email and password are required' }, { status: 400 });
         }
 
-        const email = rawEmail.toLowerCase();
+        const email = rawEmail.toLowerCase().trim();
         const userCol = await users();
         const existingUser = await userCol.findOne({ email });
 
