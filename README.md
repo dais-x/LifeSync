@@ -8,6 +8,13 @@ The system integrates intelligent automation, adaptive scheduling, and wellness 
 
 ---
 
+## Live Application
+
+Access the deployed LifeSync system here:  
+https://api.lifesync.laddu.cc
+
+---
+
 ## Problem Statement
 
 Traditional task management systems rely heavily on manual input and static scheduling. This leads to:
