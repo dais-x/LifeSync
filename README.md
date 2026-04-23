@@ -45,37 +45,37 @@ This approach ensures efficient task handling while maintaining user well-being.
 ### 1. Automatic Task Ingestion (n8n Orchestration)
 LifeSync uses **n8n as its core orchestration engine** to automate the process of task collection from multiple communication platforms such as Gmail and messaging services. Through structured workflow pipelines, the system extracts important information like deadlines, reminders, and actionable items using Natural Language Processing (NLP). This eliminates the need for manual data entry and significantly reduces the risk of missing critical tasks.
 
----
+
 
 ### 2. Voice-Based Task Input (Whisper Integration)
 LifeSync integrates **Whisper-based speech recognition**, allowing users to input tasks through voice commands. The spoken input is transcribed into text and processed through the n8n workflow pipeline for scheduling. This improves accessibility and reduces interaction effort.
 
----
+
 
 ### 3. Adaptive Scheduling System
 The system dynamically adjusts tasks based on priority, deadlines, and user behavior patterns. It monitors real-time progress and reallocates tasks accordingly, ensuring efficient time utilization and preventing backlog accumulation.
 
----
+
 
 ### 4. Energy Level Scoring (ELS) Framework
 Each task is assigned an energy value based on complexity and effort. A daily energy threshold is maintained to prevent overload. This ensures a balance between high-energy and low-energy tasks, reducing burnout.
 
----
+
 
 ### 5. Ghost Mode (Automatic Rescheduling)
 Ghost Mode automatically reschedules incomplete tasks by analyzing priority, urgency, and available time slots. High-priority tasks are handled first to ensure important deadlines are not missed.
 
----
+
 
 ### 6. Wellness and Lifestyle Integration
 LifeSync includes features such as hydration tracking, medication reminders, and period tracking. These ensure users maintain a balance between productivity and personal health.
 
----
+
 
 ### 7. AI Chatbot Interface
 An AI-powered chatbot allows users to interact using natural language. Tasks can be added, modified, or queried conversationally, improving usability and accessibility.
 
----
+
 
 ### 8. Learning and Productivity Tools
 Users can upload study materials and generate flashcards automatically. Calendar-based visualization helps in planning and organizing tasks effectively.
