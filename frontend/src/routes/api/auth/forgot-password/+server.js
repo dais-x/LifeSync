@@ -39,6 +39,9 @@ export async function POST({ request }) {
 	await sendEmail({
 		to: email,
 		subject: 'Reset your LifeSync password',
+		// We pass null for templateData to force the use of raw HTML in email.js
+		// until a specific password reset template is created.
+		templateData: null, 
 		html: `
 			<h1>Reset your password</h1>
 			<p>Please click the link below to reset your password. This link expires in 15 minutes.</p>

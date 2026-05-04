@@ -71,11 +71,7 @@ export async function POST({ request, getClientAddress }) {
 			templateData: {
 				name: user.name || 'User',
 				otp_code: otp
-			},
-			html: `
-				<h1>Verify your account</h1>
-				<p>Your verification code is: ${otp}</p>
-			`
+			}
 		});
 
 		return json({ 

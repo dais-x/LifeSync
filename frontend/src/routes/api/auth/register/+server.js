@@ -54,11 +54,7 @@ export async function POST({ request }) {
                 templateData: {
                     name: name || 'User',
                     otp_code: otp
-                },
-                html: `
-                    <h1>Verify your account</h1>
-                    <p>Your verification code is: ${otp}</p>
-                `
+                }
             });
         } catch (emailError) {
             // This will catch the silent crash and print EXACTLY why Resend is failing
