@@ -20,11 +20,7 @@
         <div class="logo">
             <i class="bx bxs-bolt accent-icon"></i> LifeSync
         </div>
-        <div class="nav-links">
-            <a href="#features">Features</a>
-            <a href="#pro">LifeSyncPro</a>
-            <a href="#pricing">Pricing</a>
-        </div>
+        
         <a href="/login" class="login-btn">Log In</a>
     </nav>
 
@@ -33,10 +29,7 @@
             Master Your Life.<br />
             <span class="gradient-text">Not Just Your Tasks.</span>
         </h1>
-        <p class="hero-subtitle">
-            The first AI-powered OS that syncs your tasks with your <span class="white-text">energy</span
-            >, <span class="white-text">location</span>, and <span class="white-text">health cycle</span>.
-        </p>
+        
 
         <div class="cta-buttons">
             <a href="/signup" class="btn-primary">Get Started Free</a>
