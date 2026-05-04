@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import { users, tokens } from '$lib/server/db.js';
 import { generateToken, hashToken } from '$lib/server/auth/token.js';
 import { sendEmail } from '$lib/server/email.js';
-import { APP_URL } from '$env/static/private';
+import { APP_URL, RESEND_FORGOT_PASSWORD_TEMPLATE_ID } from '$env/static/private';
 
 export async function POST({ request }) {
 	const { email } = await request.json();
@@ -39,14 +39,11 @@ export async function POST({ request }) {
 	await sendEmail({
 		to: email,
 		subject: 'Reset your LifeSync password',
-		// We pass null for templateData to force the use of raw HTML in email.js
-		// until a specific password reset template is created.
-		templateData: null, 
-		html: `
-			<h1>Reset your password</h1>
-			<p>Please click the link below to reset your password. This link expires in 15 minutes.</p>
-			<a href="${resetLink}">${resetLink}</a>
-		`
+		templateId: RESEND_FORGOT_PASSWORD_TEMPLATE_ID,
+		templateData: {
+			name: user.name || 'User',
+			reset_link: resetLink
+		}
 	});
 
 	return json({ message: 'If an account exists, a reset link has been sent.' });

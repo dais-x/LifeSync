@@ -3,8 +3,9 @@ import { RESEND_API_KEY, RESEND_FROM_EMAIL, RESEND_TEMPLATE_ID } from '$env/stat
 
 const resend = new Resend(RESEND_API_KEY);
 
-export async function sendEmail({ to, subject, html, templateData }) {
+export async function sendEmail({ to, subject, html, templateData, templateId }) {
     const sender = RESEND_FROM_EMAIL || 'LifeSync <onboarding@resend.dev>';
+    const activeTemplateId = templateId || RESEND_TEMPLATE_ID;
 
     try {
         const payload = {
@@ -13,10 +14,10 @@ export async function sendEmail({ to, subject, html, templateData }) {
             subject: subject,
         };
 
-        // Only use the template if we have the ID AND templateData.
-        if (RESEND_TEMPLATE_ID && templateData) {
+        // Only use the template if we have an ID AND templateData.
+        if (activeTemplateId && templateData) {
             payload.template = {
-                id: RESEND_TEMPLATE_ID,
+                id: activeTemplateId,
                 variables: templateData
             };
         } else {
