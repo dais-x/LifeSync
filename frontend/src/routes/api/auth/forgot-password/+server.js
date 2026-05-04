@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import { users, tokens } from '$lib/server/db.js';
 import { generateToken, hashToken } from '$lib/server/auth/token.js';
 import { sendEmail } from '$lib/server/email.js';
-import { APP_URL, RESEND_FORGOT_PASSWORD_TEMPLATE_ID } from '$env/static/private';
+import { APP_URL } from '$env/static/private';
 
 export async function POST({ request }) {
 	const { email } = await request.json();
@@ -39,7 +39,7 @@ export async function POST({ request }) {
 	await sendEmail({
 		to: email,
 		subject: 'Reset your LifeSync password',
-		templateId: RESEND_FORGOT_PASSWORD_TEMPLATE_ID,
+		templateId: 'ed03f65a-49b7-46bc-ba51-22cb0999ad50',
 		templateData: {
 			name: user.name || 'User',
 			reset_link: resetLink
