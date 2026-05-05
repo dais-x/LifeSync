@@ -115,13 +115,13 @@
                     <p class="app-name">LifeSync</p>
                     <p class="app-version">v1.0.4-beta</p>
                 </div>
-           <!-- </div>
-            <div class="about-links">
+           </div>
+          <!--   <div class="about-links">
                 <a href="#">Terms of service</a>
                 <a href="#">Privacy policy</a>
                 <a href="#">Contact support</a>
-            </div>
-        </div> -->
+            </div> -->
+        </div> 
     </div>
 
     <!-- Prominent Logout & Delete Footer -->
