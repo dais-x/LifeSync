@@ -83,22 +83,22 @@
         <div class="settings-list">
             <div class="info-group">
                 <p class="label">Last login activity</p>
-                <p class="value">March 9, 2026 • 10:24 AM from Dhaka, BD</p>
+                <p class="value">May 06, 2026 • 08:24 AM from Kerala, India</p>
             </div>
             <div class="list-container">
                 <p class="label">Active Sessions</p>
                 <div class="session-item">
                     <i class='bx bx-mobile-alt'></i>
                     <div class="session-info">
-                        <p class="device">iPhone 15 Pro • Current</p>
-                        <p class="location">Dhaka, Bangladesh</p>
+                        <p class="device">Samsung S21 FE • Current</p>
+                        <p class="location">Kerala, India</p>
                     </div>
                 </div>
                 <div class="session-item">
                     <i class='bx bx-desktop'></i>
                     <div class="session-info">
                         <p class="device">Windows PC • Chrome</p>
-                        <p class="location">Dhaka, Bangladesh</p>
+                        <p class="location">Kerala, India</p>
                     </div>
                 </div>
             </div>
@@ -130,7 +130,7 @@
             <button class="logout-main-btn" on:click={logout}>
                 <i class='bx bx-log-out'></i> Log Out
             </button>
-            <button class="delete-btn">Delete Account</button>
+            <button class="delete-btn" on:click={logout}>Delete Account</button>
         </div>
     </div>
 </div>
