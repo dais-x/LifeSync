@@ -69,9 +69,9 @@
                 <a href="/tasks" class="nav-item {$page.url.pathname === '/tasks' ? 'active' : ''}"
                     ><i class="bx bx-task"></i> Tasks</a
                 >
-                <a href="/insight" class="nav-item {$page.url.pathname === '/insight' ? 'active' : ''}"
+                <!--<a href="/insight" class="nav-item {$page.url.pathname === '/insight' ? 'active' : ''}"
                     ><i class="bx bx-brain"></i> AI Insights</a
-                >
+                >-->
                 <a href="/health" class="nav-item {$page.url.pathname === '/health' ? 'active' : ''}"
                     ><i class="bx bx-pulse"></i> Health</a
                 >
@@ -106,9 +106,9 @@
             <a href="/tasks" class="mob-item {$page.url.pathname === '/tasks' ? 'active' : ''}"
                 ><i class="bx bx-task"></i> Tasks</a
             >
-            <a href="/insight" class="mob-item {$page.url.pathname === '/insight' ? 'active' : ''}"
+           <!-- <a href="/insight" class="mob-item {$page.url.pathname === '/insight' ? 'active' : ''}"
                 ><i class="bx bx-brain"></i> AI</a
-            >
+            >-->
             <a href="/health" class="mob-item {$page.url.pathname === '/health' ? 'active' : ''}"
                 ><i class="bx bx-pulse"></i> Health</a
             >
