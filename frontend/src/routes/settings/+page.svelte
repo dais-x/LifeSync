@@ -105,7 +105,7 @@
             <button class="action-btn outline" on:click={logout}>Logout from all devices</button>
         </div>
     </div>
-
+<!--
     <!-- Notifications Section -->
     <div class="card">
         <div class="section-header">
@@ -264,7 +264,7 @@
             <button class="action-btn outline"><i class='bx bx-download'></i> Download backup</button>
         </div>
     </div>
-
+-->
     <!-- About Section -->
     <div class="card about-card">
         <div class="about-content">
@@ -274,13 +274,13 @@
                     <p class="app-name">LifeSync</p>
                     <p class="app-version">v1.0.4-beta</p>
                 </div>
-            </div>
+           <!-- </div>
             <div class="about-links">
                 <a href="#">Terms of service</a>
                 <a href="#">Privacy policy</a>
                 <a href="#">Contact support</a>
             </div>
-        </div>
+        </div> -->
     </div>
 
     <!-- Prominent Logout & Delete Footer -->
