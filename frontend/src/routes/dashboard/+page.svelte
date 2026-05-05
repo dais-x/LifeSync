@@ -450,10 +450,7 @@
         <h2>Dashboard</h2>
     </div>
     <div class="header-right">
-        <div class="search-bar">
-            <i class="bx bx-search"></i>
-            <input type="text" placeholder="Search..." aria-label="Search" />
-        </div>
+        
         <div class="avatar">
             {$currentUser?.name ? $currentUser.name.substring(0, 2).toUpperCase() : 'ME'}
         </div>
