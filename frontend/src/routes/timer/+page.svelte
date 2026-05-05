@@ -1,5 +1,7 @@
 <script>
-    import { onDestroy } from 'svelte';
+    import { onMount, onDestroy } from 'svelte';
+    import { currentUser } from '$lib/stores';
+    import { PUBLIC_API_URL } from '$env/static/public';
 
     // Timer Configuration
     let mode = $state('pomodoro'); // 'pomodoro', '5217', 'custom'
@@ -19,7 +21,7 @@
         custom: { work: 45 * 60, break: 15 * 60 }
     };
 
-    // Current State (FIX: Removed dynamic 'mode' dependency to satisfy Svelte 5 compiler)
+    // Current State
     let timeLeft = $state(presets.pomodoro.work);
 
     // Custom Input Bindings (in minutes for the UI)
@@ -36,6 +38,30 @@
 
     // Log Computations
     let totalFocusTime = $derived(sessionLogs.reduce((acc, log) => acc + (log.endTime.getTime() - log.startTime.getTime()), 0));
+
+    // --- NEW: ON MOUNT LOAD TODAY'S CLOUD LOGS ---
+    onMount(async () => {
+        const actualUserId = $currentUser?.id || $currentUser?._id;
+        if (actualUserId) {
+            const today = new Date().toISOString().split('T')[0];
+            
+            try {
+                // FIXED: Use relative path, bypass the .env variable entirely for web
+                const res = await fetch(`/api/timer/logs?userId=${actualUserId}&date=${today}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.logs) {
+                        sessionLogs = data.logs.map(log => ({
+                            startTime: new Date(log.startTime),
+                            endTime: new Date(log.endTime)
+                        }));
+                    }
+                }
+            } catch(e) {
+                console.error("Failed to load cloud logs", e);
+            }
+        }
+    });
 
     function formatDuration(ms) {
         if (ms < 0) ms = 0;
@@ -81,7 +107,7 @@
     function startTimer() {
         if (isRunning) return;
         if (isWorkPhase && !currentSessionStart) {
-            currentSessionStart = new Date();
+            currentSessionStart = new Date(); // Start tracking the chunk!
         }
         isRunning = true;
         timerInterval = setInterval(() => {
@@ -94,8 +120,12 @@
     }
 
     function pauseTimer() {
+        if (!isRunning) return; // Prevent double firing
         isRunning = false;
         clearInterval(timerInterval);
+        
+        // HABIBI FIX: End and save the session chunk the moment they hit pause!
+        endFocusSession(); 
     }
 
     function resetTimer() {
@@ -105,18 +135,43 @@
     }
 
     function handlePhaseComplete() {
-        // Play a sound here in the future if needed
         skipPhase();
     }
 
     function endFocusSession() {
+        const actualUserId = $currentUser?.id || $currentUser?._id;
+        
         if (isWorkPhase && currentSessionStart) {
             const endTime = new Date();
-            // Only log sessions longer than a minute
-            if (endTime.getTime() - currentSessionStart.getTime() > 60000) {
-                sessionLogs = [...sessionLogs, { startTime: currentSessionStart, endTime }];
+            const duration = endTime.getTime() - currentSessionStart.getTime();
+            
+            // Kept at 5 seconds (5000ms) for an easy live presentation demo!
+            if (duration > 5000) {
+                const newLog = { startTime: currentSessionStart, endTime };
+                
+                // Optimistic UI update (shows instantly on screen)
+                sessionLogs = [...sessionLogs, newLog];
+
+                // --- SEND TO ROBUST BACKEND ---
+                if (actualUserId) {
+                    const today = new Date().toISOString().split('T')[0];
+                    
+                    // FIXED: Use relative path to hit your local SvelteKit backend directly
+                    fetch(`/api/timer/log`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            userId: actualUserId,
+                            date: today,
+                            startTime: currentSessionStart.toISOString(),
+                            endTime: endTime.toISOString(),
+                            duration: duration 
+                        })
+                    }).catch(e => console.error("Cloud sync failed:", e));
+                }
             }
         }
+        // Reset so a new chunk starts if they unpause
         currentSessionStart = null;
     }
 
@@ -161,12 +216,12 @@
                     <button class="close-modal" onclick={() => showLog = false} aria-label="Close Log"><i class='bx bx-x'></i></button>
                 </div>
                 <div class="log-summary">
-                    <h4>Total Focus Time</h4>
+                    <h4>Total Focus Time Today</h4>
                     <div class="total-time">{formatDuration(totalFocusTime)}</div>
                 </div>
                 <div class="log-list">
                     {#if sessionLogs.length === 0}
-                        <p class="empty-log">No focus sessions logged yet. Start the timer to begin!</p>
+                        <p class="empty-log">No focus sessions logged today. Start the timer to begin!</p>
                     {:else}
                         {#each sessionLogs.slice().reverse() as log, i}
                             <div class="log-item">
